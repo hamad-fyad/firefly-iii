@@ -466,6 +466,8 @@ jobs:
           pip install -r requirements.txt
           # Install security tools that may not be in requirements.txt
           pip install bandit safety semgrep || true
+          # Install jq for JSON parsing in security summary
+          sudo apt-get update && sudo apt-get install -y jq || true
 
       - name: Run Security Tests (Custom Runner)
         env:
@@ -530,40 +532,18 @@ jobs:
             echo "" >> security-reports/security-summary.md
             
             # Parse Bandit Results
-            echo "## � Bandit Security Findings:" >> security-reports/security-summary.md
+            echo "## 🔥 Bandit Security Findings:" >> security-reports/security-summary.md
             if [ -f "security-reports/bandit-report.json" ]; then
-              python3 -c "
-            import json, sys
-            try:
-                with open('security-reports/bandit-report.json', 'r') as f:
-                    data = json.load(f)
-                total = len(data.get('results', []))
-                high = len([r for r in data.get('results', []) if r.get('issue_severity') == 'HIGH'])
-                medium = len([r for r in data.get('results', []) if r.get('issue_severity') == 'MEDIUM'])
-                low = len([r for r in data.get('results', []) if r.get('issue_severity') == 'LOW'])
-                print(f'- **Total Issues**: {total}')
-                print(f'- **High Severity**: {high}')  
-                print(f'- **Medium Severity**: {medium}')
-                print(f'- **Low Severity**: {low}')
-                print()
-                
-                if total > 0:
-                    print('### 🚨 Top Issues Found:')
-                    for i, result in enumerate(data.get('results', [])[:5], 1):
-                        severity = result.get('issue_severity', 'UNKNOWN')
-                        test_name = result.get('test_name', 'Unknown Test')
-                        filename = result.get('filename', 'Unknown File').split('/')[-1]
-                        line_number = result.get('line_number', 'N/A')
-                        issue_text = result.get('issue_text', 'No description')[:100]
-                        print(f'{i}. **{severity}** - {test_name}')
-                        print(f'   - **File**: \`{filename}:{line_number}\`')
-                        print(f'   - **Issue**: {issue_text}')
-                        print()
-                else:
-                    print('✅ **No security issues found by Bandit!**')
-            except Exception as e:
-                print(f'❌ Error parsing Bandit report: {e}')
-            " >> security-reports/security-summary.md
+              # Check if Bandit report has findings using jq
+              BANDIT_RESULTS=$(cat security-reports/bandit-report.json | jq '.results | length' 2>/dev/null || echo "0")
+              echo "- **Total Issues**: $BANDIT_RESULTS" >> security-reports/security-summary.md
+              if [ "$BANDIT_RESULTS" -eq "0" ]; then
+                echo "✅ **No security issues found by Bandit!**" >> security-reports/security-summary.md
+              else
+                echo "⚠️ **Found $BANDIT_RESULTS security issues**" >> security-reports/security-summary.md
+                echo "- See detailed report: [bandit-report.json](./bandit-report.json)" >> security-reports/security-summary.md
+                echo "- Text report: [bandit-report.txt](./bandit-report.txt)" >> security-reports/security-summary.md
+              fi
             else
               echo "❌ Bandit report not generated" >> security-reports/security-summary.md
             fi
@@ -572,41 +552,16 @@ jobs:
             # Parse Semgrep Results  
             echo "## 🎯 Semgrep Security Findings:" >> security-reports/security-summary.md
             if [ -f "security-reports/semgrep-report.json" ]; then
-              python3 -c "
-            import json, sys
-            try:
-                with open('security-reports/semgrep-report.json', 'r') as f:
-                    data = json.load(f)
-                results = data.get('results', [])
-                total = len(results)
-                print(f'- **Total Findings**: {total}')
-                
-                if total > 0:
-                    severities = {}
-                    for result in results:
-                        severity = result.get('extra', {}).get('severity', 'INFO')
-                        severities[severity] = severities.get(severity, 0) + 1
-                    
-                    for sev, count in severities.items():
-                        print(f'- **{sev}**: {count} issues')
-                    print()
-                    
-                    print('### 🚨 Top Issues Found:')
-                    for i, result in enumerate(results[:5], 1):
-                        rule_id = result.get('check_id', 'Unknown Rule').split('.')[-1]
-                        message = result.get('extra', {}).get('message', 'No description')[:80]
-                        path = result.get('path', 'Unknown File').split('/')[-1]
-                        line = result.get('start', {}).get('line', 'N/A')
-                        severity = result.get('extra', {}).get('severity', 'INFO')
-                        print(f'{i}. **{severity}** - {rule_id}')
-                        print(f'   - **File**: \`{path}:{line}\`')
-                        print(f'   - **Issue**: {message}')
-                        print()
-                else:
-                    print('✅ **No security issues found by Semgrep!**')
-            except Exception as e:
-                print(f'❌ Error parsing Semgrep report: {e}')
-            " >> security-reports/security-summary.md
+              # Check if Semgrep report has findings using jq
+              SEMGREP_RESULTS=$(cat security-reports/semgrep-report.json | jq '.results | length' 2>/dev/null || echo "0")
+              echo "- **Total Findings**: $SEMGREP_RESULTS" >> security-reports/security-summary.md
+              if [ "$SEMGREP_RESULTS" -eq "0" ]; then
+                echo "✅ **No security issues found by Semgrep!**" >> security-reports/security-summary.md
+              else
+                echo "⚠️ **Found $SEMGREP_RESULTS security findings**" >> security-reports/security-summary.md
+                echo "- See detailed report: [semgrep-report.json](./semgrep-report.json)" >> security-reports/security-summary.md
+                echo "- Text report: [semgrep-report.txt](./semgrep-report.txt)" >> security-reports/security-summary.md
+              fi
             else
               echo "❌ Semgrep report not generated" >> security-reports/security-summary.md
             fi
