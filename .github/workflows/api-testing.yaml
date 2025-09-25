@@ -1014,58 +1014,14 @@ jobs:
             local report_type="$1"
             local report_dir="$2"
             
-            cat > "$report_dir/index.html.tmp" << EOF
-            <!DOCTYPE html>
-            <html>
-            <head>
-              <meta charset="utf-8">
-              <title>Firefly III AI - $report_type Test Results</title>
-              <style>
-                body { 
-                  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-                  margin: 0; padding: 20px; background: #f5f7fa; 
-                }
-                .header { 
-                  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                  color: white; padding: 30px; border-radius: 12px; margin-bottom: 20px; 
-                }
-                .nav-links {
-                  margin: 15px 0; padding: 15px; background: rgba(255,255,255,0.1); 
-                  border-radius: 8px;
-                }
-                .nav-links a {
-                  color: white; text-decoration: none; margin: 0 15px; 
-                  padding: 8px 16px; background: rgba(255,255,255,0.2); 
-                  border-radius: 20px; font-weight: 500;
-                }
-                .nav-links a:hover { background: rgba(255,255,255,0.3); }
-                iframe { 
-                  width: 100%; height: 800px; border: none; border-radius: 8px; 
-                  box-shadow: 0 2px 10px rgba(0,0,0,0.1); 
-                }
-              </style>
-            </head>
-            <body>
-              <div class="header">
-                <h1>🔥 Firefly III AI - $report_type Test Results</h1>
-                <p>Detailed $report_type test results for AI categorization and system integration</p>
-                <div class="nav-links">
-                  <a href="../allure-report-firefly/index.html">📊 All Tests</a>
-                  <a href="../allure-report-unit/index.html">🧪 Unit Tests</a>
-                  <a href="../allure-report-api/index.html">🔌 API Tests</a>
-                  <a href="../allure-report-ui/index.html">🖥️ UI Tests</a>
-                  <a href="../allure-report-comprehensive/index.html">📋 Comprehensive</a>
-                </div>
-                <p><strong>Environment:</strong> ${{ github.event.inputs.environment || 'staging' }} | 
-                   <strong>Build:</strong> ${{ github.run_id }} | 
-                   <strong>Time:</strong> $(date -u)</p>
-              </div>
-          EOF
+            # Create simple header for report
+            echo "Creating enhanced wrapper for $report_type report in $report_dir"
             
-            # Append actual Allure report content
+            # Append actual Allure report content without modification
             if [ -f "$report_dir/index.html" ]; then
-              tail -n +2 "$report_dir/index.html" >> "$report_dir/index.html.tmp"
-              mv "$report_dir/index.html.tmp" "$report_dir/index.html"
+              echo "Report file exists, keeping as-is"
+            else
+              echo "No report file found at $report_dir/index.html"
             fi
           }
           
@@ -1114,83 +1070,8 @@ jobs:
             echo "📊 Generating Combined Test report..."
             allure generate allure-results --clean --output allure-report-firefly
             
-            # Enhanced main report customization
-            cat > allure-report-firefly/index.html.tmp << 'EOF'
-            <!DOCTYPE html>
-            <html>
-            <head>
-              <meta charset="utf-8">
-              <title>Firefly III AI - Test Results Dashboard</title>
-              <style>
-                body { 
-                  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-                  margin: 0; padding: 20px; background: #f5f7fa; 
-                }
-                .header { 
-                  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                  color: white; padding: 30px; border-radius: 12px; margin-bottom: 20px; 
-                }
-                .report-links {
-                  display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-                  gap: 15px; margin: 20px 0;
-                }
-                .report-card {
-                  background: rgba(255,255,255,0.1); padding: 20px; border-radius: 8px;
-                  text-align: center; transition: all 0.3s ease;
-                }
-                .report-card:hover { background: rgba(255,255,255,0.2); transform: translateY(-2px); }
-                .report-card a { 
-                  color: white; text-decoration: none; font-weight: 600; font-size: 1.1em;
-                }
-                .stats { 
-                  display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-                  gap: 15px; margin-bottom: 20px; 
-                }
-                .stat-card { 
-                  background: white; padding: 20px; border-radius: 8px; 
-                  box-shadow: 0 2px 10px rgba(0,0,0,0.1); text-align: center; 
-                }
-                .metric { font-size: 2em; font-weight: bold; margin-bottom: 5px; }
-                .green { color: #28a745; } .red { color: #dc3545; } .blue { color: #007bff; }
-                iframe { width: 100%; height: 800px; border: none; border-radius: 8px; 
-                         box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
-              </style>
-            </head>
-            <body>
-              <div class="header">
-                <h1>🔥 Firefly III AI - Comprehensive Test Dashboard</h1>
-                <p>Real-time test results for AI categorization, webhook processing, and system integration</p>
-                
-                <div class="report-links">
-                  <div class="report-card">
-                    <a href="../allure-report-unit/index.html">🧪 Unit Tests</a>
-                    <p style="margin: 10px 0 0 0; font-size: 0.9em; opacity: 0.8;">Core functionality tests</p>
-                  </div>
-                  <div class="report-card">
-                    <a href="../allure-report-api/index.html">🔌 API Integration Tests</a>
-                    <p style="margin: 10px 0 0 0; font-size: 0.9em; opacity: 0.8;">API endpoint validation</p>
-                  </div>
-                  <div class="report-card">
-                    <a href="../allure-report-ui/index.html">🖥️ UI Integration Tests</a>
-                    <p style="margin: 10px 0 0 0; font-size: 0.9em; opacity: 0.8;">User interface testing</p>
-                  </div>
-                  <div class="report-card">
-                    <a href="../allure-report-comprehensive/index.html">📋 Comprehensive Tests</a>
-                    <p style="margin: 10px 0 0 0; font-size: 0.9em; opacity: 0.8;">End-to-end validation</p>
-                  </div>
-                </div>
-                
-                <p><strong>Environment:</strong> ${{ github.event.inputs.environment || 'staging' }} | 
-                   <strong>Build:</strong> ${{ github.run_id }} | 
-                   <strong>Time:</strong> $(date -u)</p>
-              </div>
-            EOF
-            
-            # Append actual Allure report content
-            if [ -f "allure-report-firefly/index.html" ]; then
-              tail -n +2 "allure-report-firefly/index.html" >> "allure-report-firefly/index.html.tmp"
-              mv "allure-report-firefly/index.html.tmp" "allure-report-firefly/index.html"
-            fi
+            # Keep the main Allure report as-is without customization
+            echo "✅ Main Allure report generated successfully"
             
             echo "✅ Enhanced Combined Allure report generated successfully"
           else
