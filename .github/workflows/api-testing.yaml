@@ -234,26 +234,31 @@ jobs:
           export DISPLAY=:99
           Xvfb :99 -screen 0 1024x768x24 > /dev/null 2>&1 &
           
-          # Run UI tests
-          if [ -d "tests-UI" ]; then
-            echo "🔍 Running UI tests from tests-UI directory"
-            python -m pytest tests-UI/ -v --alluredir=allure-results-ui/ || echo "UI tests completed with issues"
-          elif [ -d "UI-tests" ]; then
-            echo "🔍 Running UI tests from UI-tests directory"  
-            python -m pytest UI-tests/ -v --alluredir=allure-results-ui/ || echo "UI tests completed with issues"
-          else
-            echo "⚠️ No UI test directory found (tests-UI or UI-tests)"
-            echo "Creating placeholder UI test results"
-            mkdir -p allure-results-ui
-            echo '{"name": "UI Tests", "status": "skipped", "statusDetails": {"message": "No UI tests found"}}' > allure-results-ui/placeholder.json
+          # Use custom test runner for UI tests
+          echo "🔍 Running UI tests with custom runner..."
+          if ! python run_github_tests.py ui; then
+            echo "⚠️ Custom runner failed, falling back to manual UI test execution..."
+            # Fallback to manual pytest execution
+            if [ -d "tests-UI" ]; then
+              echo "🔍 Running UI tests from tests-UI directory"
+              python -m pytest tests-UI/ -v --alluredir=allure-results/ || echo "UI tests completed with issues"
+            elif [ -d "UI-tests" ]; then
+              echo "🔍 Running UI tests from UI-tests directory"  
+              python -m pytest UI-tests/ -v --alluredir=allure-results/ || echo "UI tests completed with issues"
+            else
+              echo "⚠️ No UI test directory found (tests-UI or UI-tests)"
+              echo "Creating placeholder UI test results"
+              mkdir -p allure-results
+              echo '{"name": "UI Tests", "status": "skipped", "statusDetails": {"message": "No UI tests found"}}' > allure-results/placeholder.json
+            fi
           fi
 
       - name: Run Mock UI Tests (if remote unavailable)
         if: steps.ui_check.outputs.available == 'false'
         run: |
           echo "🔄 Remote Firefly III UI unavailable, creating mock test results"
-          mkdir -p allure-results-ui
-          cat > allure-results-ui/mock-ui-test.json << 'EOF'
+          mkdir -p allure-results
+          cat > allure-results/mock-ui-test.json << 'EOF'
           {
             "name": "Mock UI Test - Remote Unavailable",
             "status": "skipped",
@@ -270,7 +275,7 @@ jobs:
         if: always()
         with:
           name: allure-results-ui-${{ github.run_id }}
-          path: allure-results-ui/
+          path: allure-results/
           retention-days: 30
 
   all-tests-discovery:
