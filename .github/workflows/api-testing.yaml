@@ -80,6 +80,7 @@ jobs:
           API_TESTING_TOKEN: ${{ secrets.API_TESTING_TOKEN }}
           STATIC_CRON_TOKEN: ${{ secrets.STATIC_CRON_TOKEN }}
         run: |
+          # Use custom test runner with proper markers and coverage
           python run_github_tests.py unit
 
       - name: Upload Unit Test Allure Results
@@ -153,6 +154,7 @@ jobs:
           API_TESTING_TOKEN: ${{ secrets.API_TESTING_TOKEN }}
           STATIC_CRON_TOKEN: ${{ secrets.STATIC_CRON_TOKEN }}
         run: |
+          # Use custom test runner with proper markers for API tests
           python run_github_tests.py api
 
       - name: Run Unit Tests (fallback if API unavailable or token invalid)
@@ -163,6 +165,7 @@ jobs:
           STATIC_CRON_TOKEN: ${{ secrets.STATIC_CRON_TOKEN }}
         run: |
           echo "🔄 Remote Firefly III unavailable or token invalid, running unit tests only"
+          # Use custom test runner with proper markers for unit tests
           python run_github_tests.py unit
 
       - name: Upload API Test Allure Results
@@ -270,6 +273,52 @@ jobs:
           path: allure-results-ui/
           retention-days: 30
 
+  all-tests-discovery:
+    name: All GitHub Actions Compatible Tests
+    runs-on: ubuntu-latest
+    if: ${{ !cancelled() }}
+
+    steps:
+      - name: Checkout test code
+        uses: actions/checkout@v4
+        with:
+          repository: hamad-fyad/firefly
+          token: ${{ secrets.UI_TESTING_GITHUB_TOKEN }}
+          fetch-depth: 1
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Discover and Run All Tests
+        env:
+          GITHUB_ACTIONS: true
+          FIREFLY_BASE_URL: ${{ env.FIREFLY_BASE_URL }}
+          API_TESTING_TOKEN: ${{ secrets.API_TESTING_TOKEN }}
+          STATIC_CRON_TOKEN: ${{ secrets.STATIC_CRON_TOKEN }}
+        run: |
+          echo "🔍 Discovering all test files in tests/ directory..."
+          find tests/ -name "test_*.py" -o -name "*_test.py" | head -20
+          echo ""
+          echo "🚀 Running ALL GitHub Actions compatible tests..."
+          # Use custom test runner with 'all' option for comprehensive test discovery
+          # This uses markers: -m "github_actions and not local_only"
+          python run_github_tests.py all
+
+      - name: Upload All Tests Allure Results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: allure-results-all-tests-${{ github.run_id }}
+          path: allure-results/
+          retention-days: 30
+
   comprehensive-tests:
     name: All Tests (Manual Trigger)
     runs-on: ubuntu-latest
@@ -310,6 +359,47 @@ jobs:
           path: allure-results/
           retention-days: 30
 
+  business-tests:
+    name: Business Workflow Tests
+    runs-on: ubuntu-latest
+    if: ${{ !cancelled() }}
+
+    steps:
+      - name: Checkout test code
+        uses: actions/checkout@v4
+        with:
+          repository: hamad-fyad/firefly
+          token: ${{ secrets.UI_TESTING_GITHUB_TOKEN }}
+          fetch-depth: 1
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run Business Workflow Tests
+        env:
+          GITHUB_ACTIONS: true
+          FIREFLY_BASE_URL: ${{ env.FIREFLY_BASE_URL }}
+          API_TESTING_TOKEN: ${{ secrets.API_TESTING_TOKEN }}
+          STATIC_CRON_TOKEN: ${{ secrets.STATIC_CRON_TOKEN }}
+        run: |
+          # Use custom test runner for business workflow tests
+          python run_github_tests.py business
+
+      - name: Upload Business Test Results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: allure-results-business-${{ github.run_id }}
+          path: allure-results/
+          retention-days: 30
+
   code-quality:
     name: Code Quality & Linting
     runs-on: ubuntu-latest
@@ -327,42 +417,23 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install quality tools
+      - name: Install dependencies and quality tools
         run: |
           python -m pip install --upgrade pip
-          pip install flake8 mypy pylint
           pip install -r requirements.txt
+          # Install quality tools that may not be in requirements.txt
+          pip install flake8 mypy pylint black isort || true
 
-      - name: Run flake8 (Style Guide)
+      - name: Run Code Quality Tests (Custom Runner)
+        env:
+          GITHUB_ACTIONS: true
         run: |
-          flake8 tests/ *.py --max-line-length=100 --ignore=E203,W503 || echo "::warning::Style guide violations found"
-
-      - name: Run mypy (Type Checking)
-        run: |
-          mypy tests/ --ignore-missing-imports || echo "::warning::Type checking issues found"
-
-      - name: Run pylint (Code Analysis)
-        run: |
-          pylint tests/ *.py --disable=C0114,C0115,C0116,R0903 --exit-zero
-
-      - name: Generate Code Quality Report
-        run: |
-          mkdir -p quality-reports
-          echo "# Code Quality Report" > quality-reports/quality-summary.md
-          echo "Generated: $(date)" >> quality-reports/quality-summary.md
-          echo "" >> quality-reports/quality-summary.md
-          
-      
-          
-          # Flake8 check
-          if flake8 tests/ *.py --max-line-length=100 --ignore=E203,W503; then
-            echo "✅ Flake8: No style guide violations" >> quality-reports/quality-summary.md
-          else
-            echo "❌ Flake8: Style guide violations found" >> quality-reports/quality-summary.md
-          fi
+          # Use custom test runner for comprehensive quality checks
+          python run_github_tests.py quality
 
       - name: Upload Quality Reports
         uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: code-quality-report-${{ github.run_id }}
           path: quality-reports/
@@ -384,174 +455,22 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install security tools
+      - name: Install dependencies and security tools
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install bandit semgrep
+          # Install security tools that may not be in requirements.txt
+          pip install bandit safety semgrep || true
 
-
-      - name: Create security reports directory
+      - name: Run Security Tests (Custom Runner)
+        env:
+          GITHUB_ACTIONS: true
         run: |
-          mkdir -p security-reports
+          # Use custom test runner for comprehensive security checks
+          # This includes Bandit, Safety, Semgrep, and secrets detection
+          python run_github_tests.py security
 
-      - name: Run Bandit Security Scanner
-        run: |
-          echo "🔍 Running Bandit security scanner..."
-          bandit -r tests/ firefly-ai-categorizer/ *.py -f json -o security-reports/bandit-report.json || true
-          bandit -r tests/ firefly-ai-categorizer/ *.py -f txt -o security-reports/bandit-report.txt || true
-          echo "📊 Bandit scan completed"
 
-      - name: Run Semgrep (SAST)
-        run: |
-          echo "🔍 Running Semgrep SAST scanner..."
-          semgrep --config=auto tests/ firefly-ai-categorizer/ *.py --json --output=security-reports/semgrep-report.json || true
-          semgrep --config=auto tests/ firefly-ai-categorizer/ *.py --text --output=security-reports/semgrep-report.txt || true
-          echo "📊 Semgrep scan completed"
-
-      - name: Check for Secrets in Code
-        run: |
-          # Check for potential secrets
-          echo "🔍 Scanning for potential secrets..."
-          grep -r -i "password\|secret\|key\|token" tests/ --exclude-dir=__pycache__ || echo "No obvious secrets found"
-          
-          # Check for hardcoded URLs and IPs
-          grep -r -E "http://[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+" tests/ || echo "No hardcoded IPs found"
-
-      - name: Generate Enhanced Security Summary
-        run: |
-          echo "# 🛡️ Security Test Report" > security-reports/security-summary.md
-          echo "Generated: $(date)" >> security-reports/security-summary.md
-          echo "" >> security-reports/security-summary.md
-          
-          # Test Summary
-          echo "## 🔍 Tests Performed:" >> security-reports/security-summary.md
-          echo "- **Bandit**: Python security linter for common security issues" >> security-reports/security-summary.md
-          echo "- **Semgrep**: Static Application Security Testing (SAST)" >> security-reports/security-summary.md
-          echo "- **Secrets Detection**: Manual pattern matching for hardcoded secrets" >> security-reports/security-summary.md
-          echo "" >> security-reports/security-summary.md
-          
-          # Parse Bandit Results
-          echo "## 🔥 Bandit Security Findings:" >> security-reports/security-summary.md
-          if [ -f "security-reports/bandit-report.json" ]; then
-            python3 -c "
-          import json, sys
-          try:
-              with open('security-reports/bandit-report.json', 'r') as f:
-                  data = json.load(f)
-              total = len(data.get('results', []))
-              high = len([r for r in data.get('results', []) if r.get('issue_severity') == 'HIGH'])
-              medium = len([r for r in data.get('results', []) if r.get('issue_severity') == 'MEDIUM'])
-              low = len([r for r in data.get('results', []) if r.get('issue_severity') == 'LOW'])
-              print(f'- **Total Issues**: {total}')
-              print(f'- **High Severity**: {high}')  
-              print(f'- **Medium Severity**: {medium}')
-              print(f'- **Low Severity**: {low}')
-              print()
-              
-              if total > 0:
-                  print('### 🚨 Top Issues Found:')
-                  for i, result in enumerate(data.get('results', [])[:5], 1):
-                      severity = result.get('issue_severity', 'UNKNOWN')
-                      test_name = result.get('test_name', 'Unknown Test')
-                      filename = result.get('filename', 'Unknown File').split('/')[-1]
-                      line_number = result.get('line_number', 'N/A')
-                      issue_text = result.get('issue_text', 'No description')[:100]
-                      print(f'{i}. **{severity}** - {test_name}')
-                      print(f'   - **File**: \`{filename}:{line_number}\`')
-                      print(f'   - **Issue**: {issue_text}')
-                      print()
-              else:
-                  print('✅ **No security issues found by Bandit!**')
-          except Exception as e:
-              print(f'❌ Error parsing Bandit report: {e}')
-          " >> security-reports/security-summary.md
-          else
-            echo "❌ Bandit report not generated" >> security-reports/security-summary.md
-          fi
-          echo "" >> security-reports/security-summary.md
-          
-          # Parse Semgrep Results  
-          echo "## 🎯 Semgrep Security Findings:" >> security-reports/security-summary.md
-          if [ -f "security-reports/semgrep-report.json" ]; then
-            python3 -c "
-          import json, sys
-          try:
-              with open('security-reports/semgrep-report.json', 'r') as f:
-                  data = json.load(f)
-              results = data.get('results', [])
-              total = len(results)
-              print(f'- **Total Findings**: {total}')
-              
-              if total > 0:
-                  severities = {}
-                  for result in results:
-                      severity = result.get('extra', {}).get('severity', 'INFO')
-                      severities[severity] = severities.get(severity, 0) + 1
-                  
-                  for sev, count in severities.items():
-                      print(f'- **{sev}**: {count} issues')
-                  print()
-                  
-                  print('### 🚨 Top Issues Found:')
-                  for i, result in enumerate(results[:5], 1):
-                      rule_id = result.get('check_id', 'Unknown Rule').split('.')[-1]
-                      message = result.get('extra', {}).get('message', 'No description')[:80]
-                      path = result.get('path', 'Unknown File').split('/')[-1]
-                      line = result.get('start', {}).get('line', 'N/A')
-                      severity = result.get('extra', {}).get('severity', 'INFO')
-                      print(f'{i}. **{severity}** - {rule_id}')
-                      print(f'   - **File**: \`{path}:{line}\`')
-                      print(f'   - **Issue**: {message}')
-                      print()
-              else:
-                  print('✅ **No security issues found by Semgrep!**')
-          except Exception as e:
-              print(f'❌ Error parsing Semgrep report: {e}')
-          " >> security-reports/security-summary.md
-          else
-            echo "❌ Semgrep report not generated" >> security-reports/security-summary.md
-          fi
-          echo "" >> security-reports/security-summary.md
-          
-          # Manual secrets check results
-          echo "## 🔐 Secrets Detection Results:" >> security-reports/security-summary.md
-          
-          # Check for secrets and save results
-          SECRET_FINDINGS=$(grep -r -i "password\|secret\|key\|token" tests/ firefly-ai-categorizer/ --exclude-dir=__pycache__ --exclude="*.pyc" 2>/dev/null | head -10 || echo "")
-          if [ -n "$SECRET_FINDINGS" ]; then
-            echo "⚠️ **Potential secrets found:**" >> security-reports/security-summary.md
-            echo '```' >> security-reports/security-summary.md
-            echo "$SECRET_FINDINGS" >> security-reports/security-summary.md
-            echo '```' >> security-reports/security-summary.md
-          else
-            echo "✅ **No obvious hardcoded secrets detected**" >> security-reports/security-summary.md
-          fi
-          echo "" >> security-reports/security-summary.md
-          
-          # Hardcoded IPs check
-          IP_FINDINGS=$(grep -r -E "http://[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+" tests/ firefly-ai-categorizer/ 2>/dev/null || echo "")
-          if [ -n "$IP_FINDINGS" ]; then
-            echo "🌐 **Hardcoded IP addresses found:**" >> security-reports/security-summary.md
-            echo '```' >> security-reports/security-summary.md
-            echo "$IP_FINDINGS" >> security-reports/security-summary.md
-            echo '```' >> security-reports/security-summary.md
-          else
-            echo "✅ **No hardcoded IP addresses detected**" >> security-reports/security-summary.md
-          fi
-          echo "" >> security-reports/security-summary.md
-          
-          # Summary
-          echo "## 📋 Security Scan Summary:" >> security-reports/security-summary.md
-          echo "- **Report Generated**: $(date)" >> security-reports/security-summary.md
-          echo "- **Scanned Directories**: tests/, firefly-ai-categorizer/, root Python files" >> security-reports/security-summary.md
-          echo "- **Tools Used**: Bandit, Semgrep, Manual pattern matching" >> security-reports/security-summary.md
-          echo "" >> security-reports/security-summary.md
-          echo "📄 **Detailed Reports Available:**" >> security-reports/security-summary.md
-          echo "- [Bandit JSON Report](bandit-report.json)" >> security-reports/security-summary.md
-          echo "- [Bandit Text Report](bandit-report.txt)" >> security-reports/security-summary.md
-          echo "- [Semgrep JSON Report](semgrep-report.json)" >> security-reports/security-summary.md
-          echo "- [Semgrep Text Report](semgrep-report.txt)" >> security-reports/security-summary.md
 
       - name: Upload Security Reports
         uses: actions/upload-artifact@v4
@@ -770,7 +689,7 @@ jobs:
   allure-report:
     name: Generate Test Reports and Deploy to GitHub Pages
     runs-on: ubuntu-latest
-    needs: [unit-tests, api-tests, ui-tests, code-quality, security-tests, dependency-tests, load-tests]
+    needs: [unit-tests, api-tests, ui-tests, all-tests-discovery, comprehensive-tests, code-quality, security-tests, business-tests, dependency-tests, load-tests]
     if: always()
     permissions:
       contents: write
@@ -824,6 +743,14 @@ jobs:
           merge-multiple: false
         continue-on-error: true
 
+      - name: Download All Tests Discovery Results
+        uses: actions/download-artifact@v4
+        with:
+          pattern: allure-results-all-tests-${{ github.run_id }}
+          path: allure-results-all-tests-downloaded
+          merge-multiple: false
+        continue-on-error: true
+
       - name: Download Comprehensive Test Results
         uses: actions/download-artifact@v4
         with:
@@ -863,7 +790,7 @@ jobs:
       - name: Prepare Separate Allure Reports
         run: |
           # Create directories for different report types
-          mkdir -p allure-results-unit allure-results-api allure-results-ui allure-results-comprehensive
+          mkdir -p allure-results-unit allure-results-api allure-results-ui allure-results-all-tests allure-results-comprehensive
           
           # Merge Unit Test results
           if [ -d "allure-results-unit-downloaded" ]; then
@@ -892,6 +819,15 @@ jobs:
             done
           fi
           
+          # Merge All Tests Discovery results
+          if [ -d "allure-results-all-tests-downloaded" ]; then
+            for dir in allure-results-all-tests-downloaded/*/; do
+              if [ -d "$dir" ]; then
+                cp -r "$dir"* allure-results-all-tests/ 2>/dev/null || true
+              fi
+            done
+          fi
+          
           # Merge Comprehensive Test results
           if [ -d "allure-results-comprehensive-downloaded" ]; then
             for dir in allure-results-comprehensive-downloaded/*/; do
@@ -906,6 +842,7 @@ jobs:
           cp -r allure-results-unit/* allure-results/ 2>/dev/null || true
           cp -r allure-results-api/* allure-results/ 2>/dev/null || true  
           cp -r allure-results-ui/* allure-results/ 2>/dev/null || true
+          cp -r allure-results-all-tests/* allure-results/ 2>/dev/null || true
           cp -r allure-results-comprehensive/* allure-results/ 2>/dev/null || true
           
           # Create environment properties for each report type
@@ -938,6 +875,10 @@ jobs:
             create_env_properties "UI Integration" "allure-results-ui"
           fi
           
+          if [ -d "allure-results-all-tests" ] && [ "$(ls -A allure-results-all-tests)" ]; then
+            create_env_properties "All Tests Discovery" "allure-results-all-tests"
+          fi
+          
           if [ -d "allure-results-comprehensive" ] && [ "$(ls -A allure-results-comprehensive)" ]; then
             create_env_properties "Comprehensive" "allure-results-comprehensive"
           fi
@@ -950,7 +891,7 @@ jobs:
           GitHub.Run=${{ github.run_id }}
           GitHub.Workflow=${{ github.workflow }}
           Firefly.URL=${{ env.FIREFLY_URL }}
-          Test.Types=Unit Tests (AI + Webhook), API Integration, UI Integration, Security, Load, Quality
+          Test.Types=Unit Tests (AI + Webhook), API Integration, UI Integration, All Tests Discovery, Security, Load, Quality
           Timestamp=$(date -u +"%Y-%m-%d %H:%M:%S UTC")
           Quality.Checks=Flake8, MyPy, Pylint
           Security.Tools=Bandit, Semgrep, Secrets Detection
@@ -1055,6 +996,16 @@ jobs:
             echo "⚠️  No UI test results found"
           fi
           
+          # Generate All Tests Discovery Report
+          if [ -d "allure-results-all-tests" ] && [ "$(ls -A allure-results-all-tests)" ]; then
+            echo "📊 Generating All Tests Discovery report..."
+            allure generate allure-results-all-tests --clean --output allure-report-all-tests
+            create_report_wrapper "All Tests Discovery" "allure-report-all-tests"
+            echo "✅ All Tests Discovery report generated"
+          else
+            echo "⚠️  No All Tests Discovery results found"
+          fi
+          
           # Generate Comprehensive Test Report
           if [ -d "allure-results-comprehensive" ] && [ "$(ls -A allure-results-comprehensive)" ]; then
             echo "📊 Generating Comprehensive Test report..."
@@ -1104,6 +1055,11 @@ jobs:
           if [ -d "allure-report-ui" ]; then
             mkdir -p pages-content/allure-report-ui
             cp -r allure-report-ui/* pages-content/allure-report-ui/
+          fi
+          
+          if [ -d "allure-report-all-tests" ]; then
+            mkdir -p pages-content/allure-report-all-tests
+            cp -r allure-report-all-tests/* pages-content/allure-report-all-tests/
           fi
           
           if [ -d "allure-report-comprehensive" ]; then
@@ -1198,9 +1154,10 @@ jobs:
                       <ul>
                           <li>✅ <strong>Unit Tests</strong>: AI Categorizer & Webhook Service (16 tests)</li>
                           <li>🔌 <strong>API Integration</strong>: Firefly III endpoints and workflows</li>
-                          <li>�️ <strong>UI Integration</strong>: User interface and workflow testing</li>
-                          <li>📋 <strong>Comprehensive Tests</strong>: End-to-end system validation</li>
-                          <li>�🛡️ <strong>Security Analysis</strong>: Bandit, Semgrep, Secrets Detection</li>
+                          <li>🖥️ <strong>UI Integration</strong>: User interface and workflow testing</li>
+                          <li>� <strong>All Tests Discovery</strong>: Auto-discover and run all tests in tests/ folder</li>
+                          <li>�📋 <strong>Comprehensive Tests</strong>: End-to-end system validation</li>
+                          <li>🛡️ <strong>Security Analysis</strong>: Bandit, Semgrep, Secrets Detection</li>
                           <li>⚡ <strong>Performance</strong>: Load testing with Locust</li>
                           <li>📦 <strong>Dependencies</strong>: Vulnerability audit, license compliance</li>
                       </ul>
@@ -1215,6 +1172,7 @@ jobs:
                           <a href="allure-report-unit/" class="report-link">🧪 Unit Tests Only</a>
                           <a href="allure-report-api/" class="report-link">🔌 API Tests Only</a>
                           <a href="allure-report-ui/" class="report-link">🖥️ UI Tests Only</a>
+                          <a href="allure-report-all-tests/" class="report-link">🔍 All Tests Discovery</a>
                           <a href="allure-report-comprehensive/" class="report-link">📋 Comprehensive Tests</a>
                       </div>
                       
