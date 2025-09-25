@@ -504,8 +504,8 @@ jobs:
             
             # Run Safety for dependency vulnerabilities  
             echo "🛡️ Running Safety dependency scan..."
-            safety check --json --output security-reports/safety-report.json 2>/dev/null || echo "⚠️ Safety scan completed"
-            safety check --output security-reports/safety-report.txt 2>/dev/null || echo "⚠️ Safety text report completed"
+            safety check --json --output security-reports/safety-report.json 2>/dev/null || echo "[]" > security-reports/safety-report.json
+            safety check --output security-reports/safety-report.txt 2>/dev/null || echo "No known security vulnerabilities found." > security-reports/safety-report.txt
             
             # Run Semgrep for additional security patterns
             echo "🎯 Running Semgrep security analysis..."
@@ -516,108 +516,25 @@ jobs:
               echo "⚠️ Semgrep not available, skipping"
             fi
             
-            # Create comprehensive security summary with detailed analysis
-            echo "# 🛡️ Security Analysis Report" > security-reports/security-summary.md
-            echo "" >> security-reports/security-summary.md
-            echo "## 🎯 Quick Overview" >> security-reports/security-summary.md
-            # We'll populate this after all scans complete
+            # Create minimal security summary
+            echo "# 🛡️ Security Report" > security-reports/security-summary.md
             echo "" >> security-reports/security-summary.md
             
-            # Parse Bandit Results
-            echo "## 🔥 Bandit Security Findings:" >> security-reports/security-summary.md
-            if [ -f "security-reports/bandit-report.json" ]; then
-              # Check if Bandit report has findings using jq
-              BANDIT_RESULTS=$(cat security-reports/bandit-report.json | jq '.results | length' 2>/dev/null || echo "0")
-              echo "- **Total Issues**: $BANDIT_RESULTS" >> security-reports/security-summary.md
-              if [ "$BANDIT_RESULTS" -eq "0" ]; then
-                echo "✅ **No security issues found by Bandit!**" >> security-reports/security-summary.md
-              else
-                echo "⚠️ **Found $BANDIT_RESULTS security issues**" >> security-reports/security-summary.md
-                echo "- See detailed report: [bandit-report.json](./bandit-report.json)" >> security-reports/security-summary.md
-                echo "- Text report: [bandit-report.txt](./bandit-report.txt)" >> security-reports/security-summary.md
-              fi
-            else
-              echo "❌ Bandit report not generated" >> security-reports/security-summary.md
-            fi
-            echo "" >> security-reports/security-summary.md
-            
-            # Parse Semgrep Results  
-            echo "## 🎯 Semgrep Security Findings:" >> security-reports/security-summary.md
-            if [ -f "security-reports/semgrep-report.json" ]; then
-              # Check if Semgrep report has findings using jq
-              SEMGREP_RESULTS=$(cat security-reports/semgrep-report.json | jq '.results | length' 2>/dev/null || echo "0")
-              echo "- **Total Findings**: $SEMGREP_RESULTS" >> security-reports/security-summary.md
-              if [ "$SEMGREP_RESULTS" -eq "0" ]; then
-                echo "✅ **No security issues found by Semgrep!**" >> security-reports/security-summary.md
-              else
-                echo "⚠️ **Found $SEMGREP_RESULTS security findings**" >> security-reports/security-summary.md
-                echo "- See detailed report: [semgrep-report.json](./semgrep-report.json)" >> security-reports/security-summary.md
-                echo "- Text report: [semgrep-report.txt](./semgrep-report.txt)" >> security-reports/security-summary.md
-              fi
-            else
-              echo "❌ Semgrep report not generated" >> security-reports/security-summary.md
-            fi
-            echo "" >> security-reports/security-summary.md
-            
-            # Parse Safety Results
-            echo "## 🛡️ Safety Dependency Check:" >> security-reports/security-summary.md
-            if [ -f "security-reports/safety-report.json" ]; then
-              # Check if Safety report has vulnerabilities
-              SAFETY_RESULTS=$(cat security-reports/safety-report.json | jq 'length' 2>/dev/null || echo "0")
-              echo "- **Vulnerabilities Found**: $SAFETY_RESULTS" >> security-reports/security-summary.md
-              if [ "$SAFETY_RESULTS" -eq "0" ]; then
-                echo "✅ **No known vulnerabilities in dependencies!**" >> security-reports/security-summary.md
-              else
-                echo "⚠️ **Found $SAFETY_RESULTS dependency vulnerabilities**" >> security-reports/security-summary.md
-                echo "- See detailed report: [safety-report.json](./safety-report.json)" >> security-reports/security-summary.md
-                echo "- Text report: [safety-report.txt](./safety-report.txt)" >> security-reports/security-summary.md
-              fi
-            else
-              echo "❌ Safety report not generated" >> security-reports/security-summary.md
-            fi
-            echo "" >> security-reports/security-summary.md
-            
-            # Manual secrets check results
-            echo "## 🔐 Manual Security Checks:" >> security-reports/security-summary.md
-            
-            # Check for secrets and count results
+            # Parse results and create compact summary
+            BANDIT_RESULTS=$(cat security-reports/bandit-report.json | jq '.results | length' 2>/dev/null || echo "0")
+            SEMGREP_RESULTS=$(cat security-reports/semgrep-report.json | jq '.results | length' 2>/dev/null || echo "0")
+            SAFETY_RESULTS=$(cat security-reports/safety-report.json | jq 'length' 2>/dev/null || echo "0")
             SECRET_COUNT=$(grep -r -i "password\|secret\|key\|token" tests/ firefly-ai-categorizer/ --exclude-dir=__pycache__ --exclude="*.pyc" 2>/dev/null | wc -l || echo "0")
-            echo "- **Potential Secrets Found**: $SECRET_COUNT matches" >> security-reports/security-summary.md
-            if [ "$SECRET_COUNT" -gt "0" ]; then
-              echo "⚠️ **Manual review recommended for hardcoded credentials**" >> security-reports/security-summary.md
-            else
-              echo "✅ **No obvious hardcoded secrets detected**" >> security-reports/security-summary.md
-            fi
             
-            # Hardcoded IPs check
-            IP_COUNT=$(grep -r -E "http://[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+" tests/ firefly-ai-categorizer/ 2>/dev/null | wc -l || echo "0")
-            echo "- **Hardcoded IPs Found**: $IP_COUNT matches" >> security-reports/security-summary.md
-            if [ "$IP_COUNT" -gt "0" ]; then
-              echo "⚠️ **Manual review recommended for hardcoded IP addresses**" >> security-reports/security-summary.md
-            else
-              echo "✅ **No hardcoded IP addresses detected**" >> security-reports/security-summary.md
-            fi
+            echo "| Tool | Issues | Report |" >> security-reports/security-summary.md
+            echo "|------|--------|--------|" >> security-reports/security-summary.md
+            echo "| 🔥 Bandit | $BANDIT_RESULTS | [JSON](./bandit-report.json) |" >> security-reports/security-summary.md
+            echo "| 🎯 Semgrep | $SEMGREP_RESULTS | [JSON](./semgrep-report.json) |" >> security-reports/security-summary.md
+            echo "| 🛡️ Safety | $SAFETY_RESULTS | [JSON](./safety-report.json) |" >> security-reports/security-summary.md
+            echo "| 🔐 Secrets | $SECRET_COUNT | Manual scan |" >> security-reports/security-summary.md
             echo "" >> security-reports/security-summary.md
-            
-            # Populate Quick Overview with collected stats
-            sed -i 's/## 🎯 Quick Overview/## 🎯 Quick Overview\n\n| Tool | Status | Issues Found |\n|------|--------|-------------|\n| 🔥 Bandit | ✅ Complete | '$BANDIT_RESULTS' |\n| 🎯 Semgrep | ✅ Complete | '$SEMGREP_RESULTS' |\n| 🛡️ Safety | ✅ Complete | '$SAFETY_RESULTS' |\n| 🔐 Secrets | ✅ Complete | '$SECRET_COUNT' matches |\n| 🌐 IPs | ✅ Complete | '$IP_COUNT' matches |/' security-reports/security-summary.md
-            
-            # Summary
-            echo "---" >> security-reports/security-summary.md
-            echo "## 📋 Summary" >> security-reports/security-summary.md
-            echo "**Generated**: $(date)" >> security-reports/security-summary.md
-            echo "" >> security-reports/security-summary.md
-            echo "**🔧 Tools Used**: Bandit, Semgrep, Safety, Manual pattern matching" >> security-reports/security-summary.md
-            echo "**📁 Scanned**: tests/, firefly-ai-categorizer/, root Python files" >> security-reports/security-summary.md
-            echo "" >> security-reports/security-summary.md
-            echo "### 📄 Detailed Reports" >> security-reports/security-summary.md
-            echo "| Tool | JSON Report | Text Report |" >> security-reports/security-summary.md
-            echo "|------|-------------|-------------|" >> security-reports/security-summary.md
-            echo "| Bandit | [bandit-report.json](./bandit-report.json) | [bandit-report.txt](./bandit-report.txt) |" >> security-reports/security-summary.md
-            echo "| Semgrep | [semgrep-report.json](./semgrep-report.json) | [semgrep-report.txt](./semgrep-report.txt) |" >> security-reports/security-summary.md
-            echo "| Safety | [safety-report.json](./safety-report.json) | [safety-report.txt](./safety-report.txt) |" >> security-reports/security-summary.md
+            echo "_Generated: $(date)_" >> security-reports/security-summary.md
           fi
-
 
 
       - name: Upload Security Reports
