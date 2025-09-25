@@ -43,6 +43,7 @@ env:
   FIREFLY_VERSION: fireflyiii/core:version-6.3.2
   FIREFLY_DB: mariaDB:noble
   FIREFLY_IMPORTER: fireflyiii/importer:version-1.7.10
+  OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY || 'sk-test-mock-api-key-for-github-actions' }}
 
 permissions:
   contents: write
@@ -307,6 +308,7 @@ jobs:
           FIREFLY_BASE_URL: ${{ env.FIREFLY_BASE_URL }}
           API_TESTING_TOKEN: ${{ secrets.API_TESTING_TOKEN }}
           STATIC_CRON_TOKEN: ${{ secrets.STATIC_CRON_TOKEN }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY || 'sk-test-mock-api-key-for-github-actions' }}
         run: |
           echo "🔍 Discovering all test files in tests/ directory..."
           find tests/ -name "test_*.py" -o -name "*_test.py" | head -20
@@ -353,6 +355,7 @@ jobs:
           FIREFLY_BASE_URL: ${{ env.FIREFLY_BASE_URL }}
           API_TESTING_TOKEN: ${{ secrets.API_TESTING_TOKEN }}
           STATIC_CRON_TOKEN: ${{ secrets.STATIC_CRON_TOKEN }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY || 'sk-test-mock-api-key-for-github-actions' }}
         run: |
           python run_github_tests.py ${{ github.event.inputs.test_type }}
 
@@ -393,6 +396,7 @@ jobs:
           FIREFLY_BASE_URL: ${{ env.FIREFLY_BASE_URL }}
           API_TESTING_TOKEN: ${{ secrets.API_TESTING_TOKEN }}
           STATIC_CRON_TOKEN: ${{ secrets.STATIC_CRON_TOKEN }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY || 'sk-test-mock-api-key-for-github-actions' }}
         run: |
           # Use custom test runner for business workflow tests
           python run_github_tests.py business
