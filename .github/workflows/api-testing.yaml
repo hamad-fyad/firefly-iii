@@ -191,6 +191,8 @@ jobs:
           token: ${{ secrets.UI_TESTING_GITHUB_TOKEN }}
           fetch-depth: 1
 
+
+
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
@@ -201,30 +203,28 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Set up Chrome and ChromeDriver
+      - name: Set up Chrome Browser
         run: |
-          # Update Chrome to stable version
-          wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | sudo apt-key add -
-          echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" | sudo tee /etc/apt/sources.list.d/google-chrome.list
+          # Update Chrome to stable version (using modern keyring method)
+          wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | sudo gpg --dearmor -o /usr/share/keyrings/google-chrome-keyring.gpg
+          echo "deb [arch=amd64 signed-by=/usr/share/keyrings/google-chrome-keyring.gpg] http://dl.google.com/linux/chrome/deb/ stable main" | sudo tee /etc/apt/sources.list.d/google-chrome.list
           sudo apt-get update
           sudo apt-get install -y google-chrome-stable
           
-          # Install compatible ChromeDriver
-          CHROME_VERSION=$(google-chrome --version | grep -oE "[0-9]+\.[0-9]+\.[0-9]+")
-          echo "Chrome version: $CHROME_VERSION"
-          
-          # Get compatible ChromeDriver version
-          CHROMEDRIVER_VERSION=$(curl -s "https://chromedriver.storage.googleapis.com/LATEST_RELEASE_${CHROME_VERSION%%.*}")
-          echo "ChromeDriver version: $CHROMEDRIVER_VERSION"
-          
-          # Download and install ChromeDriver
-          wget -O /tmp/chromedriver.zip "https://chromedriver.storage.googleapis.com/${CHROMEDRIVER_VERSION}/chromedriver_linux64.zip"
-          sudo unzip /tmp/chromedriver.zip -d /usr/local/bin/
-          sudo chmod +x /usr/local/bin/chromedriver
-          
-          # Verify installation
+          # Verify Chrome installation
+          echo "🔍 Chrome installed:"
           google-chrome --version
+
+      - name: Set up ChromeDriver  
+        uses: nanasess/setup-chromedriver@v2
+        with:
+          chromedriver-version: 'latest'
+
+      - name: Verify ChromeDriver Setup
+        run: |
+          echo "🔍 ChromeDriver installed:"
           chromedriver --version
+          echo "✅ Chrome and ChromeDriver setup complete"
 
       - name: Set up Xvfb (Virtual Display)
         run: |
