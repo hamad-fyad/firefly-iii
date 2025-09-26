@@ -303,17 +303,25 @@ jobs:
           DISPLAY: ":99"
         run: |
           echo "🧪 Testing Chrome WebDriver connection..."
+          echo "📋 This smoke test verifies:"
+          echo "   ✓ Chrome browser starts successfully"
+          echo "   ✓ ChromeDriver can control the browser"
+          echo "   ✓ Basic Selenium operations work (navigation, element finding, JavaScript)"
+          echo "   ✓ Browser window management functions properly"
           
-          # Run our smoke test to verify WebDriver works
+          # Run our smoke test to verify WebDriver works (uses data URI, no network needed)
           python -m pytest tests-UI/test_chrome_smoke.py::ChromeSmokeTest::test_chrome_basic_functionality -v --tb=short || {
             echo "❌ WebDriver smoke test failed"
             echo "🔍 Debugging Chrome and ChromeDriver versions:"
             google-chrome --version || echo "Chrome not found"
             chromedriver --version || echo "ChromeDriver not found"
+            echo "🔍 Checking Xvfb display:"
+            echo "DISPLAY=$DISPLAY"
+            ps aux | grep -i xvfb || echo "Xvfb process not found"
             exit 1
           }
           
-          echo "✅ WebDriver verification complete"
+          echo "✅ WebDriver verification complete - Selenium stack is ready"
 
       - name: Run UI Tests
         env:
