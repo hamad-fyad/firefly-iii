@@ -188,6 +188,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: hamad-fyad/firefly
+          ref: intgrate_with_chatgpt
           token: ${{ secrets.UI_TESTING_GITHUB_TOKEN }}
           fetch-depth: 1
 
