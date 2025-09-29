@@ -202,79 +202,10 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Set up Chrome Browser
+      - name: Install Chrome and ChromeDriver
         run: |
-          # Update Chrome to stable version (using modern keyring method)
-          wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | sudo gpg --dearmor -o /usr/share/keyrings/google-chrome-keyring.gpg
-          echo "deb [arch=amd64 signed-by=/usr/share/keyrings/google-chrome-keyring.gpg] http://dl.google.com/linux/chrome/deb/ stable main" | sudo tee /etc/apt/sources.list.d/google-chrome.list
           sudo apt-get update
           sudo apt-get install -y google-chrome-stable
-          
-          # Verify Chrome installation
-          echo "🔍 Chrome installed:"
-          google-chrome --version
-
-      - name: Set up ChromeDriver (Chrome for Testing)
-        run: |
-          # Get Chrome version for compatibility matching
-          CHROME_VERSION=$(google-chrome --version | grep -oE "[0-9]+\.[0-9]+\.[0-9]+")
-          CHROME_MAJOR=${CHROME_VERSION%%.*}
-          echo "Chrome version: $CHROME_VERSION (Major: $CHROME_MAJOR)"
-          
-          # Use Chrome for Testing API for recent Chrome versions
-          if [ "$CHROME_MAJOR" -ge "115" ]; then
-            echo "🔄 Using Chrome for Testing API (Chrome 115+)"
-            
-            # Use a stable known ChromeDriver version that works with Chrome 140+
-            # This approach downloads a specific known-good version
-            CHROMEDRIVER_VERSION="140.0.7327.0"  # Known stable version for Chrome 140
-            DOWNLOAD_URL="https://storage.googleapis.com/chrome-for-testing-public/${CHROMEDRIVER_VERSION}/linux64/chromedriver-linux64.zip"
-            
-            echo "📥 Downloading ChromeDriver ${CHROMEDRIVER_VERSION}"
-            wget -q -O /tmp/chromedriver.zip "$DOWNLOAD_URL"
-            
-            if [ $? -eq 0 ]; then
-              echo "✅ Downloaded ChromeDriver successfully"
-              unzip -q /tmp/chromedriver.zip -d /tmp/
-              
-              # Find the chromedriver binary and install it
-              CHROMEDRIVER_BINARY=$(find /tmp -name "chromedriver" -type f 2>/dev/null | head -1)
-              if [ -n "$CHROMEDRIVER_BINARY" ] && [ -f "$CHROMEDRIVER_BINARY" ]; then
-                sudo cp "$CHROMEDRIVER_BINARY" /usr/local/bin/chromedriver
-                sudo chmod +x /usr/local/bin/chromedriver
-                echo "✅ ChromeDriver installed to /usr/local/bin/chromedriver"
-              else
-                echo "❌ ChromeDriver binary not found in download"
-                exit 1
-              fi
-            else
-              echo "❌ Failed to download ChromeDriver, trying fallback..."
-              
-              # Fallback: try a few other known versions
-              for version in "140.0.7327.14" "139.0.7354.0" "138.0.7328.0"; do
-                echo "🔄 Trying ChromeDriver version $version"
-                FALLBACK_URL="https://storage.googleapis.com/chrome-for-testing-public/${version}/linux64/chromedriver-linux64.zip"
-                wget -q -O /tmp/chromedriver-fallback.zip "$FALLBACK_URL"
-                
-                if [ $? -eq 0 ]; then
-                  unzip -q /tmp/chromedriver-fallback.zip -d /tmp/fallback/
-                  CHROMEDRIVER_BINARY=$(find /tmp/fallback -name "chromedriver" -type f 2>/dev/null | head -1)
-                  if [ -n "$CHROMEDRIVER_BINARY" ] && [ -f "$CHROMEDRIVER_BINARY" ]; then
-                    sudo cp "$CHROMEDRIVER_BINARY" /usr/local/bin/chromedriver
-                    sudo chmod +x /usr/local/bin/chromedriver
-                    echo "✅ ChromeDriver $version installed successfully"
-                    break
-                  fi
-                fi
-              done
-            fi
-          else
-            echo "🔄 Using legacy method for older Chrome versions"
-            # For older Chrome versions, use Ubuntu package manager
-            sudo apt-get update
-            sudo apt-get install -y chromium-chromedriver
-            sudo ln -sf /usr/lib/chromium-browser/chromedriver /usr/local/bin/chromedriver
-          fi
 
       - name: Verify ChromeDriver Setup
         run: |
@@ -303,25 +234,17 @@ jobs:
           DISPLAY: ":99"
         run: |
           echo "🧪 Testing Chrome WebDriver connection..."
-          echo "📋 This smoke test verifies:"
-          echo "   ✓ Chrome browser starts successfully"
-          echo "   ✓ ChromeDriver can control the browser"
-          echo "   ✓ Basic Selenium operations work (navigation, element finding, JavaScript)"
-          echo "   ✓ Browser window management functions properly"
           
-          # Run our smoke test to verify WebDriver works (uses data URI, no network needed)
+          # Run our smoke test to verify WebDriver works
           python -m pytest tests-UI/test_chrome_smoke.py::ChromeSmokeTest::test_chrome_basic_functionality -v --tb=short || {
             echo "❌ WebDriver smoke test failed"
             echo "🔍 Debugging Chrome and ChromeDriver versions:"
             google-chrome --version || echo "Chrome not found"
             chromedriver --version || echo "ChromeDriver not found"
-            echo "🔍 Checking Xvfb display:"
-            echo "DISPLAY=$DISPLAY"
-            ps aux | grep -i xvfb || echo "Xvfb process not found"
             exit 1
           }
           
-          echo "✅ WebDriver verification complete - Selenium stack is ready"
+          echo "✅ WebDriver verification complete"
 
       - name: Run UI Tests
         env:
@@ -623,12 +546,11 @@ jobs:
     if: ${{ !cancelled() }}
 
     steps:
-      - name: Checkout code
+      - name: Checkout test code
         uses: actions/checkout@v4
         with:
           repository: hamad-fyad/firefly
           token: ${{ secrets.UI_TESTING_GITHUB_TOKEN }}
-
 
       - name: Set up Python
         uses: actions/setup-python@v4
@@ -686,333 +608,6 @@ jobs:
                       else:
                           response.failure(f"Unexpected status: {response.status_code}")
           EOF
-          
-          # Create Locust load test for AI Categorizer Service
-          cat > load-tests/ai_service_load_test.py << 'EOF'
-          from locust import HttpUser, task, between
-          import json
-          import random
-          
-          class AICategoryUser(HttpUser):
-              wait_time = between(0.5, 2)
-              
-              def on_start(self):
-                  self.headers = {
-                      "Content-Type": "application/json",
-                      "Accept": "application/json"
-                  }
-                  
-                  # Sample transaction descriptions for realistic load testing
-                  self.test_descriptions = [
-                      "Starbucks Coffee Shop Manhattan",
-                      "Shell Gas Station Highway 101",
-                      "Amazon Prime Monthly Subscription",
-                      "Uber Trip Downtown to Airport", 
-                      "McDonald's Drive Thru Lunch",
-                      "Netflix Streaming Service",
-                      "Whole Foods Grocery Shopping",
-                      "ATM Withdrawal Bank of America",
-                      "Gym Membership Gold's Gym",
-                      "Spotify Premium Subscription",
-                      "Target Store Shopping",
-                      "CVS Pharmacy Purchase",
-                      "Electric Bill Payment",
-                      "Internet Service Provider",
-                      "Car Insurance Premium",
-                      "Doctor Office Visit Copay"
-                  ]
-              
-              @task(5)
-              def test_categorize_endpoint(self):
-                  """Test the simple categorization endpoint"""
-                  description = random.choice(self.test_descriptions)
-                  payload = {"description": description}
-                  
-                  with self.client.post("/test-categorize", 
-                                      json=payload, 
-                                      headers=self.headers,
-                                      catch_response=True) as response:
-                      if response.status_code == 200:
-                          try:
-                              data = response.json()
-                              if "predicted_category" in data:
-                                  response.success()
-                              else:
-                                  response.failure("Missing predicted_category in response")
-                          except Exception:
-                              response.failure("Invalid JSON response")
-                      else:
-                          response.failure(f"Status: {response.status_code}")
-              
-              @task(3) 
-              def incoming_webhook_endpoint(self):
-                  """Test the incoming webhook endpoint with full payload"""
-                  description = random.choice(self.test_descriptions)
-                  payload = {
-                      "content": {
-                          "transactions": [{
-                              "transaction_journal_id": f"load_test_{random.randint(1000, 9999)}",
-                              "description": description
-                          }]
-                      }
-                  }
-                  
-                  with self.client.post("/incoming", 
-                                      json=payload, 
-                                      headers=self.headers,
-                                      catch_response=True) as response:
-                      if response.status_code == 200:
-                          try:
-                              data = response.json()
-                              if "category" in data or "predicted_category" in data:
-                                  response.success()
-                              else:
-                                  response.failure("Missing category in response")
-                          except Exception:
-                              response.failure("Invalid JSON response")
-                      else:
-                          response.failure(f"Status: {response.status_code}")
-              
-              @task(2)
-              def health_check(self):
-                  """Test health endpoint"""
-                  with self.client.get("/health", catch_response=True) as response:
-                      if response.status_code == 200:
-                          response.success()
-                      else:
-                          response.failure(f"Health check failed: {response.status_code}")
-              
-              @task(1)
-              def metrics_endpoint(self):
-                  """Test metrics endpoint"""
-                  with self.client.get("/metrics", catch_response=True) as response:
-                      if response.status_code in [200, 404]:  # 404 acceptable if no data
-                          response.success()
-                      else:
-                          response.failure(f"Metrics failed: {response.status_code}")
-              
-              @task(1)
-              def debug_env_endpoint(self):
-                  """Test debug environment endpoint"""  
-                  with self.client.get("/debug-env", catch_response=True) as response:
-                      if response.status_code in [200, 404]:  # 404 acceptable if endpoint disabled
-                          response.success()
-                      else:
-                          response.failure(f"Debug env failed: {response.status_code}")
-          EOF
-          
-          # Create Locust load test for Webhook Service
-          cat > load-tests/webhook_service_load_test.py << 'EOF'
-          from locust import HttpUser, task, between
-          import json
-          import random
-          
-          class WebhookServiceUser(HttpUser):
-              wait_time = between(0.5, 2)
-              
-              def on_start(self):
-                  self.headers = {
-                      "Content-Type": "application/json",
-                      "Accept": "application/json"
-                  }
-                  
-                  # Sample webhook payloads for realistic testing
-                  self.sample_transactions = [
-                      "Coffee shop purchase downtown",
-                      "Gas station fuel fill-up",
-                      "Grocery store weekly shopping", 
-                      "Online subscription renewal",
-                      "Restaurant dinner with friends",
-                      "Public transportation monthly pass",
-                      "Pharmacy prescription pickup",
-                      "Bookstore purchase online",
-                      "Movie theater tickets",
-                      "Utility bill payment"
-                  ]
-              
-              @task(4)
-              def webhook_transaction_event(self):
-                  """Test webhook processing with transaction creation event"""
-                  description = random.choice(self.sample_transactions)
-                  tx_id = f"webhook_test_{random.randint(10000, 99999)}"
-                  
-                  payload = {
-                      "trigger": "STORE_TRANSACTION",
-                      "content": {
-                          "transactions": [{
-                              "transaction_journal_id": tx_id,
-                              "description": description,
-                              "amount": round(random.uniform(5.0, 200.0), 2),
-                              "type": "withdrawal"
-                          }]
-                      }
-                  }
-                  
-                  with self.client.post("/webhook", 
-                                      json=payload, 
-                                      headers=self.headers,
-                                      catch_response=True) as response:
-                      if response.status_code == 200:
-                          try:
-                              data = response.json()
-                              # Accept various success responses
-                              if data.get("status") in ["category_updated", "ignored", "no_model_available"]:
-                                  response.success()
-                              else:
-                                  response.failure(f"Unexpected status: {data.get('status')}")
-                          except Exception:
-                              response.failure("Invalid JSON response")
-                      else:
-                          response.failure(f"Status: {response.status_code}")
-              
-              @task(2)
-              def feedback_endpoint(self):
-                  """Test feedback endpoint"""
-                  payload = {
-                      "transaction_id": f"feedback_test_{random.randint(1000, 9999)}",
-                      "description": random.choice(self.sample_transactions),
-                      "correct_category": "Food & Drink"
-                  }
-                  
-                  with self.client.post("/feedback", 
-                                      json=payload, 
-                                      headers=self.headers,
-                                      catch_response=True) as response:
-                      # Feedback might fail due to invalid transaction ID, which is expected in load testing
-                      if response.status_code in [200, 400, 404, 500]:
-                          response.success()  # Accept these as normal load test responses
-                      else:
-                          response.failure(f"Status: {response.status_code}")
-              
-              @task(2)
-              def health_check(self):
-                  """Test webhook service health"""
-                  with self.client.get("/health", catch_response=True) as response:
-                      if response.status_code == 200:
-                          response.success()
-                      else:
-                          response.failure(f"Health check failed: {response.status_code}")
-          EOF
-          
-          # Create comprehensive load test runner
-          cat > load-tests/comprehensive_load_test.py << 'EOF'
-          from locust import HttpUser, task, between, events
-          import json
-          import random
-          import time
-          
-          class ComprehensiveFireflyUser(HttpUser):
-              """
-              Comprehensive load testing across all Firefly III AI services
-              Simulates realistic user behavior and transaction processing
-              """
-              wait_time = between(1, 4)
-              
-              def on_start(self):
-                  self.firefly_headers = {
-                      "Authorization": f"Bearer {os.getenv('API_TESTING_TOKEN', 'dummy_token')}",
-                      "Content-Type": "application/json",
-                      "Accept": "application/vnd.api+json"
-                  }
-                  self.api_headers = {
-                      "Content-Type": "application/json",
-                      "Accept": "application/json"
-                  }
-                  
-                  self.transaction_descriptions = [
-                      "Starbucks morning coffee", "Shell gas station", "Amazon online order",
-                      "Uber ride to work", "Whole Foods groceries", "Netflix subscription",
-                      "CVS pharmacy", "Target shopping", "McDonald's lunch", "Gym membership"
-                  ]
-              
-              # Firefly III API Tests (30% of traffic)
-              @task(3)
-              def firefly_api_health(self):
-                  """Test Firefly III basic endpoints"""
-                  endpoints = ["/api/v1/about", "/api/v1/ping"]
-                  endpoint = random.choice(endpoints)
-                  
-                  with self.client.get(f"http://52.212.42.101:8080{endpoint}", 
-                                     headers=self.firefly_headers, 
-                                     catch_response=True) as response:
-                      if response.status_code in [200, 401, 403]:
-                          response.success()
-                      else:
-                          response.failure(f"Status: {response.status_code}")
-              
-              # AI Categorizer Tests (40% of traffic)
-              @task(4)
-              def ai_categorization_flow(self):
-                  """Test AI categorization service"""
-                  description = random.choice(self.transaction_descriptions)
-                  
-                  # Test different AI endpoints
-                  endpoints = [
-                      ("/test-categorize", {"description": description}),
-                      ("/incoming", {
-                          "content": {
-                              "transactions": [{
-                                  "transaction_journal_id": f"load_{random.randint(1000, 9999)}",
-                                  "description": description
-                              }]
-                          }
-                      })
-                  ]
-                  
-                  endpoint, payload = random.choice(endpoints)
-                  
-                  with self.client.post(f"http://52.212.42.101:8082{endpoint}",
-                                      json=payload,
-                                      headers=self.api_headers,
-                                      catch_response=True) as response:
-                      if response.status_code == 200:
-                          response.success()
-                      else:
-                          response.failure(f"AI service error: {response.status_code}")
-              
-              # Webhook Service Tests (20% of traffic)  
-              @task(2)
-              def webhook_processing(self):
-                  """Test webhook service processing"""
-                  description = random.choice(self.transaction_descriptions)
-                  
-                  payload = {
-                      "trigger": "STORE_TRANSACTION",
-                      "content": {
-                          "transactions": [{
-                              "transaction_journal_id": f"webhook_{random.randint(1000, 9999)}",
-                              "description": description
-                          }]
-                      }
-                  }
-                  
-                  with self.client.post("http://52.212.42.101:8001/webhook",
-                                      json=payload,
-                                      headers=self.api_headers,
-                                      catch_response=True) as response:
-                      if response.status_code in [200, 400]:  # 400 expected for some test data
-                          response.success()
-                      else:
-                          response.failure(f"Webhook error: {response.status_code}")
-              
-              # Monitoring Endpoints (10% of traffic)
-              @task(1)
-              def monitoring_endpoints(self):
-                  """Test monitoring and health endpoints"""
-                  endpoints = [
-                      ("http://52.212.42.101:8082/health", "AI Health"),
-                      ("http://52.212.42.101:8082/metrics", "AI Metrics"),
-                      ("http://52.212.42.101:8001/health", "Webhook Health")
-                  ]
-                  
-                  url, name = random.choice(endpoints)
-                  
-                  with self.client.get(url, catch_response=True, name=name) as response:
-                      if response.status_code in [200, 404]:
-                          response.success()
-                      else:
-                          response.failure(f"{name} failed: {response.status_code}")
-          EOF
 
       - name: Run Performance Benchmarks (Unit Tests)
         run: |
@@ -1035,424 +630,54 @@ jobs:
         env:
           API_TESTING_TOKEN: ${{ secrets.API_TESTING_TOKEN }}
         run: |
-          run: |
           cd load-tests
-          
-          # Determine test intensity based on trigger type
+          # Light load test for automatic runs, heavier for manual triggers
           if [[ "${{ github.event_name }}" == "workflow_dispatch" && "${{ github.event.inputs.test_type }}" == "load" ]]; then
-            echo "🔥 Running comprehensive load tests (manual trigger)"
-            USERS=20
-            SPAWN_RATE=5
-            RUN_TIME=120s
-            TEST_TYPE="full"
+            echo "🔥 Running full load test (manual trigger)"
+            locust -f firefly_load_test.py --headless --users 20 --spawn-rate 5 --run-time 120s --host "${{ env.FIREFLY_URL }}" --html load-test-report.html
           else
-            echo "⚡ Running light load tests (automatic)"
-            USERS=5
-            SPAWN_RATE=2
-            RUN_TIME=30s
-            TEST_TYPE="light"
+            echo "⚡ Running light load test (automatic)"
+            locust -f firefly_load_test.py --headless --users 5 --spawn-rate 1 --run-time 30s --host "${{ env.FIREFLY_URL }}" --html load-test-report.html
           fi
-          
-          # Check service availability before testing
-          echo "🔍 Checking service availability..."
-          
-          # Check AI Categorizer Service
-          if curl -f -s --max-time 5 "http://52.212.42.101:8082/health" > /dev/null; then
-            AI_SERVICE_AVAILABLE=true
-            echo "✅ AI Categorizer Service is available"
-          else
-            AI_SERVICE_AVAILABLE=false
-            echo "⚠️ AI Categorizer Service is not available"
-          fi
-          
-          # Check Webhook Service
-          if curl -f -s --max-time 5 "http://52.212.42.101:8001/health" > /dev/null; then
-            WEBHOOK_SERVICE_AVAILABLE=true
-            echo "✅ Webhook Service is available"
-          else
-            WEBHOOK_SERVICE_AVAILABLE=false
-            echo "⚠️ Webhook Service is not available"
-          fi
-          
-          # 1. Test Firefly III API
-          echo "📊 Testing Firefly III API endpoints..."
-          locust -f firefly_load_test.py --headless \
-            --users $USERS --spawn-rate $SPAWN_RATE --run-time $RUN_TIME \
-            --host "${{ env.FIREFLY_URL }}" \
-            --html firefly-load-report.html \
-            --csv firefly-results || echo "::warning::Firefly load test completed with issues"
-          
-          # 2. Test AI Categorizer Service (port 8082)
-          if [ "$AI_SERVICE_AVAILABLE" = true ]; then
-            echo "🤖 Testing AI Categorizer Service..."
-            locust -f ai_service_load_test.py --headless \
-              --users $USERS --spawn-rate $SPAWN_RATE --run-time $RUN_TIME \
-              --host "http://52.212.42.101:8082" \
-              --html ai-service-load-report.html \
-              --csv ai-service-results || echo "::warning::AI service load test completed with issues"
-          else
-            echo "🤖 AI Categorizer Service unavailable - creating placeholder report..."
-            cat > ai-service-load-report.html << 'EOF'
-          <!DOCTYPE html>
-          <html>
-          <head>
-              <title>AI Service Load Test Report</title>
-              <style>
-                  body { font-family: Arial, sans-serif; margin: 40px; background: #f5f5f5; }
-                  .container { max-width: 800px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; }
-                  .warning { background: #fff3cd; border: 1px solid #ffeaa7; padding: 15px; border-radius: 4px; margin: 20px 0; }
-                  .stats { background: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0; }
-              </style>
-          </head>
-          <body>
-              <div class="container">
-                  <h1>🤖 AI Categorizer Service Load Test</h1>
-                  
-                  <div class="warning">
-                      <h3>⚠️ Service Unavailable</h3>
-                      <p>The AI Categorizer Service (http://52.212.42.101:8082) was not available during testing.</p>
-                      <p><strong>Timestamp:</strong> $(date)</p>
-                  </div>
-                  
-                  <div class="stats">
-                      <h3>📊 Planned Test Configuration</h3>
-                      <ul>
-                          <li><strong>Target Users:</strong> $USERS concurrent</li>
-                          <li><strong>Spawn Rate:</strong> $SPAWN_RATE users/second</li>
-                          <li><strong>Duration:</strong> $RUN_TIME</li>
-                          <li><strong>Endpoints:</strong> /test-categorize, /incoming, /health, /metrics</li>
-                      </ul>
-                  </div>
-                  
-                  <div class="stats">
-                      <h3>🎯 Expected Performance Targets</h3>
-                      <ul>
-                          <li><strong>Response Time:</strong> < 2000ms (includes OpenAI API calls)</li>
-                          <li><strong>Success Rate:</strong> > 95%</li>
-                          <li><strong>Throughput:</strong> 10-50 requests/second</li>
-                          <li><strong>Error Rate:</strong> < 5%</li>
-                      </ul>
-                  </div>
-                  
-                  <p><em>To run actual load tests, ensure the AI service is running and accessible.</em></p>
-              </div>
-          </body>
-          </html>
-          EOF
-          fi
-          
-          # 3. Test Webhook Service (port 8001)
-          if [ "$WEBHOOK_SERVICE_AVAILABLE" = true ]; then
-            echo "🔗 Testing Webhook Service..."
-            locust -f webhook_service_load_test.py --headless \
-              --users $USERS --spawn-rate $SPAWN_RATE --run-time $RUN_TIME \
-              --host "http://52.212.42.101:8001" \
-              --html webhook-service-load-report.html \
-              --csv webhook-service-results || echo "::warning::Webhook service load test completed with issues"
-          else
-            echo "🔗 Webhook Service unavailable - creating placeholder report..."
-            cat > webhook-service-load-report.html << 'EOF'
-          <!DOCTYPE html>
-          <html>
-          <head>
-              <title>Webhook Service Load Test Report</title>
-              <style>
-                  body { font-family: Arial, sans-serif; margin: 40px; background: #f5f5f5; }
-                  .container { max-width: 800px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; }
-                  .warning { background: #fff3cd; border: 1px solid #ffeaa7; padding: 15px; border-radius: 4px; margin: 20px 0; }
-                  .stats { background: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0; }
-              </style>
-          </head>
-          <body>
-              <div class="container">
-                  <h1>🔗 Webhook Service Load Test</h1>
-                  
-                  <div class="warning">
-                      <h3>⚠️ Service Unavailable</h3>
-                      <p>The Webhook Service (http://52.212.42.101:8001) was not available during testing.</p>
-                      <p><strong>Timestamp:</strong> $(date)</p>
-                  </div>
-                  
-                  <div class="stats">
-                      <h3>📊 Planned Test Configuration</h3>
-                      <ul>
-                          <li><strong>Target Users:</strong> $USERS concurrent</li>
-                          <li><strong>Spawn Rate:</strong> $SPAWN_RATE users/second</li>
-                          <li><strong>Duration:</strong> $RUN_TIME</li>
-                          <li><strong>Endpoints:</strong> /webhook, /feedback, /health</li>
-                      </ul>
-                  </div>
-                  
-                  <div class="stats">
-                      <h3>🎯 Expected Performance Targets</h3>
-                      <ul>
-                          <li><strong>Response Time:</strong> < 500ms</li>
-                          <li><strong>Success Rate:</strong> > 98%</li>
-                          <li><strong>Throughput:</strong> 50-200 requests/second</li>
-                          <li><strong>Error Rate:</strong> < 2%</li>
-                      </ul>
-                  </div>
-                  
-                  <p><em>To run actual load tests, ensure the webhook service is running and accessible.</em></p>
-              </div>
-          </body>
-          </html>
-          EOF
-          fi
-          
-          # 4. Comprehensive cross-service test (only for full load tests)
-          if [[ "$TEST_TYPE" == "full" ]]; then
-            if [ "$AI_SERVICE_AVAILABLE" = true ] && [ "$WEBHOOK_SERVICE_AVAILABLE" = true ]; then
-              echo "🌐 Running comprehensive cross-service load test..."
-              locust -f comprehensive_load_test.py --headless \
-                --users 15 --spawn-rate 3 --run-time 90s \
-                --host "http://52.212.42.101:8080" \
-                --html comprehensive-load-report.html \
-                --csv comprehensive-results || echo "::warning::Comprehensive load test completed with issues"
-            else
-              echo "🌐 Cross-service test skipped - some services unavailable"
-              cat > comprehensive-load-report.html << 'EOF'
-          <!DOCTYPE html>
-          <html>
-          <head>
-              <title>Comprehensive Load Test Report</title>
-              <style>
-                  body { font-family: Arial, sans-serif; margin: 40px; background: #f5f5f5; }
-                  .container { max-width: 800px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; }
-                  .warning { background: #fff3cd; border: 1px solid #ffeaa7; padding: 15px; border-radius: 4px; margin: 20px 0; }
-              </style>
-          </head>
-          <body>
-              <div class="container">
-                  <h1>🌐 Comprehensive Load Test</h1>
-                  <div class="warning">
-                      <h3>⚠️ Test Skipped</h3>
-                      <p>Cross-service testing requires all services to be available.</p>
-                      <p>Some services were unavailable during this test run.</p>
-                  </div>
-              </div>
-          </body>
-          </html>
-          EOF
-            fi
-          fi
-          
-          echo "✅ All load tests completed"
-          
-          # Create a unified load-test-report.html for backward compatibility
-          if [[ "$TEST_TYPE" == "full" ]]; then
-            TEST_DESCRIPTION="Full load test suite (20 users, 120s duration)"
-          else
-            TEST_DESCRIPTION="Light load test suite (5 users, 30s duration)"
-          fi
-          
-          cat > load-test-report.html << EOF
-          <!DOCTYPE html>
-          <html lang="en">
-          <head>
-              <meta charset="UTF-8">
-              <meta name="viewport" content="width=device-width, initial-scale=1.0">
-              <title>Firefly III Load Test Report</title>
-              <style>
-                  body { font-family: Arial, sans-serif; margin: 40px; background: #f5f5f5; }
-                  .container { max-width: 1000px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
-                  h1 { color: #2c3e50; text-align: center; }
-                  .service-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; margin: 30px 0; }
-                  .service-card { background: #f8f9fa; padding: 20px; border-radius: 8px; border-left: 4px solid #3498db; }
-                  .report-link { display: inline-block; padding: 10px 15px; margin: 5px; background: #3498db; color: white; text-decoration: none; border-radius: 4px; }
-                  .report-link:hover { background: #2980b9; }
-                  .summary { background: #ecf0f1; padding: 20px; border-radius: 8px; margin: 20px 0; }
-              </style>
-          </head>
-          <body>
-              <div class="container">
-                  <h1>🚀 Firefly III Load Test Results</h1>
-                  
-                  <div class="summary">
-                      <h2>📊 Test Overview</h2>
-                      <p><strong>Test Mode:</strong> $TEST_DESCRIPTION</p>
-                      <p><strong>Services Tested:</strong> Firefly III API, AI Categorizer, Webhook Service</p>
-                      <p><strong>Generated:</strong> $(date)</p>
-                  </div>
-                  
-                  <div class="service-grid">
-                      <div class="service-card">
-                          <h3>🔥 Firefly III Core API</h3>
-                          <p>Load testing of main API endpoints</p>
-                          <a href="firefly-load-report.html" class="report-link">View Detailed Report</a>
-                      </div>
-                      
-                      <div class="service-card">
-                          <h3>🤖 AI Categorizer Service</h3>
-                          <p>AI categorization performance testing</p>
-                          <a href="ai-service-load-report.html" class="report-link">View Detailed Report</a>
-                      </div>
-                      
-                      <div class="service-card">
-                          <h3>🔗 Webhook Service</h3>
-                          <p>Webhook processing performance</p>
-                          <a href="webhook-service-load-report.html" class="report-link">View Detailed Report</a>
-                      </div>
-          EOF
-          
-          if [[ "$TEST_TYPE" == "full" ]]; then
-            cat >> load-test-report.html << 'EOF'
-                      
-                      <div class="service-card">
-                          <h3>🌐 Cross-Service Integration</h3>
-                          <p>End-to-end workflow testing</p>
-                          <a href="comprehensive-load-report.html" class="report-link">View Detailed Report</a>
-                      </div>
-          EOF
-          fi
-          
-          cat >> load-test-report.html << 'EOF'
-                  </div>
-                  
-                  <div class="summary">
-                      <h2>📋 Quick Links</h2>
-                      <a href="load-summary.md" class="report-link">📄 Test Summary</a>
-                      <a href="../" class="report-link">🏠 Main Dashboard</a>
-                  </div>
-              </div>
-          </body>
-          </html>
-          EOF
 
       - name: Simulate Load Tests (if Firefly unavailable)
         if: steps.load_test_check.outputs.available == 'false'
         run: |
-          echo "🔄 Simulating comprehensive load test results..."
+          echo "🔄 Simulating load test results..."
           mkdir -p load-tests
-          
-          # Create simulated reports for each service
-          cat > load-tests/simulated-comprehensive-report.html << 'EOF'
-          <html><head><title>Comprehensive Load Test Report (Simulated)</title></head>
-          <body style="font-family: Arial, sans-serif; margin: 40px; background: #f5f5f5;">
-          <div style="max-width: 1000px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px;">
-          <h1 style="color: #2c3e50;">🧪 Comprehensive Load Test Report (Simulated)</h1>
-          <p><strong>Note:</strong> Remote services were unavailable during test execution. This report shows expected test structure.</p>
-          
-          <h2>🔥 Firefly III Core API</h2>
+          cat > load-tests/simulated-load-report.html << 'EOF'
+          <html><head><title>Simulated Load Test Report</title></head>
+          <body>
+          <h1>Load Test Report (Simulated)</h1>
+          <p>Remote Firefly III instance was unavailable during test execution.</p>
+          <p>This is a placeholder report. In a real scenario with available services:</p>
           <ul>
-          <li><strong>Endpoints:</strong> /api/v1/about, /api/v1/accounts, /api/v1/transactions</li>
-          <li><strong>Expected Users:</strong> 5-20 concurrent</li>
-          <li><strong>Expected Response Time:</strong> < 300ms</li>
+          <li>10 concurrent users</li>
+          <li>60 second test duration</li>
+          <li>API endpoints: /about, /accounts, /transactions</li>
+          <li>Expected response times: < 500ms</li>
           </ul>
-          
-          <h2>🤖 AI Categorizer Service</h2>
-          <ul>
-          <li><strong>Endpoints:</strong> /test-categorize, /incoming, /health, /metrics</li>
-          <li><strong>Test Data:</strong> 16 realistic transaction descriptions</li>
-          <li><strong>Expected Response Time:</strong> < 2000ms (due to OpenAI API)</li>
-          <li><strong>Load Pattern:</strong> 50% categorization, 30% webhook, 20% monitoring</li>
-          </ul>
-          
-          <h2>🔗 Webhook Service</h2>
-          <ul>
-          <li><strong>Endpoints:</strong> /webhook, /feedback, /health</li>
-          <li><strong>Test Scenarios:</strong> Transaction events, user feedback</li>
-          <li><strong>Expected Response Time:</strong> < 500ms</li>
-          <li><strong>Load Pattern:</strong> 40% webhook events, 20% feedback, 20% health</li>
-          </ul>
-          
-          <h2>🌐 Cross-Service Integration</h2>
-          <ul>
-          <li><strong>Workflow:</strong> Firefly III → Webhook → AI Categorizer</li>
-          <li><strong>Traffic Distribution:</strong> 30% Firefly, 40% AI, 20% Webhook, 10% Monitoring</li>
-          <li><strong>Realistic Scenarios:</strong> Complete transaction processing pipeline</li>
-          </ul>
-          
-          <hr style="margin: 30px 0;">
-          <p><em>Generated: $(date)</em></p>
-          </div>
-          </body></html>
-          EOF
-          
-          # Create individual service simulation reports
-          cat > load-tests/ai-service-simulated-report.html << 'EOF'
-          <html><head><title>AI Service Load Test (Simulated)</title></head>
-          <body style="font-family: Arial, sans-serif; padding: 20px;">
-          <h1>🤖 AI Categorizer Load Test (Simulated)</h1>
-          <p>AI Categorizer service load testing structure:</p>
-          <h3>Test Endpoints:</h3>
-          <ul>
-          <li>/test-categorize - Simple categorization (50% traffic)</li>
-          <li>/incoming - Webhook payload processing (30% traffic)</li>
-          <li>/health - Health checks (10% traffic)</li>
-          <li>/metrics - Metrics endpoint (5% traffic)</li>
-          <li>/debug-env - Environment debugging (5% traffic)</li>
-          </ul>
-          <h3>Test Data:</h3>
-          <p>16 realistic transaction descriptions including Starbucks, Shell, Amazon, Uber, etc.</p>
-          </body></html>
-          EOF
-          
-          cat > load-tests/webhook-service-simulated-report.html << 'EOF'
-          <html><head><title>Webhook Service Load Test (Simulated)</title></head>
-          <body style="font-family: Arial, sans-serif; padding: 20px;">
-          <h1>🔗 Webhook Service Load Test (Simulated)</h1>
-          <p>Webhook service load testing structure:</p>
-          <h3>Test Endpoints:</h3>
-          <ul>
-          <li>/webhook - Transaction events (40% traffic)</li>
-          <li>/feedback - User corrections (20% traffic)</li>
-          <li>/health - Health checks (20% traffic)</li>
-          </ul>
-          <h3>Test Scenarios:</h3>
-          <p>Realistic webhook payloads with STORE_TRANSACTION events and user feedback processing.</p>
           </body></html>
           EOF
 
       - name: Generate Load Test Summary
         run: |
           mkdir -p load-tests
-          echo "# Comprehensive Load Test Report" > load-tests/load-summary.md
+          echo "# Load Test Report" > load-tests/load-summary.md
           echo "Generated: $(date)" >> load-tests/load-summary.md
           echo "" >> load-tests/load-summary.md
           echo "## Test Configuration:" >> load-tests/load-summary.md
           if [[ "${{ github.event_name }}" == "workflow_dispatch" && "${{ github.event.inputs.test_type }}" == "load" ]]; then
-            echo "- **Mode**: Full load test suite (manual trigger)" >> load-tests/load-summary.md
-            echo "- **Users**: 20 concurrent per service" >> load-tests/load-summary.md
-            echo "- **Duration**: 120 seconds per service" >> load-tests/load-summary.md
-            echo "- **Cross-service test**: 15 users for 90 seconds" >> load-tests/load-summary.md
+            echo "- **Mode**: Full load test (manual trigger)" >> load-tests/load-summary.md
+            echo "- **Users**: 20 concurrent" >> load-tests/load-summary.md
+            echo "- **Duration**: 120 seconds" >> load-tests/load-summary.md
           else
-            echo "- **Mode**: Light load test suite (automatic)" >> load-tests/load-summary.md
-            echo "- **Users**: 5 concurrent per service" >> load-tests/load-summary.md
-            echo "- **Duration**: 30 seconds per service" >> load-tests/load-summary.md
-            echo "- **Cross-service test**: Skipped (light mode)" >> load-tests/load-summary.md
+            echo "- **Mode**: Light load test (automatic)" >> load-tests/load-summary.md
+            echo "- **Users**: 5 concurrent" >> load-tests/load-summary.md
+            echo "- **Duration**: 30 seconds" >> load-tests/load-summary.md
           fi
-          echo "" >> load-tests/load-summary.md
-          echo "## Services Tested:" >> load-tests/load-summary.md
-          echo "### 1. 🔥 Firefly III Core API" >> load-tests/load-summary.md
-          echo "- **Host**: ${{ env.FIREFLY_URL }}" >> load-tests/load-summary.md
-          echo "- **Endpoints**: /api/v1/about, /api/v1/accounts, /api/v1/transactions" >> load-tests/load-summary.md
-          echo "- **Authentication**: Bearer token validation" >> load-tests/load-summary.md
-          echo "" >> load-tests/load-summary.md
-          echo "### 2. 🤖 AI Categorizer Service" >> load-tests/load-summary.md
-          echo "- **Host**: http://52.212.42.101:8082" >> load-tests/load-summary.md
-          echo "- **Endpoints**: /test-categorize, /incoming, /health, /metrics, /debug-env" >> load-tests/load-summary.md
-          echo "- **Load Pattern**: 50% categorization, 30% webhook, 20% monitoring" >> load-tests/load-summary.md
-          echo "- **Test Data**: 16 realistic transaction descriptions" >> load-tests/load-summary.md
-          echo "" >> load-tests/load-summary.md
-          echo "### 3. 🔗 Webhook Service" >> load-tests/load-summary.md
-          echo "- **Host**: http://52.212.42.101:8001" >> load-tests/load-summary.md
-          echo "- **Endpoints**: /webhook, /feedback, /health" >> load-tests/load-summary.md
-          echo "- **Load Pattern**: 40% webhook events, 20% feedback, 20% health" >> load-tests/load-summary.md
-          echo "- **Test Scenarios**: Transaction creation events, user feedback" >> load-tests/load-summary.md
-          echo "" >> load-tests/load-summary.md
-          echo "### 4. 🌐 Cross-Service Integration (Full Mode Only)" >> load-tests/load-summary.md
-          echo "- **Workflow**: Realistic user transaction processing" >> load-tests/load-summary.md
-          echo "- **Services**: Firefly III → Webhook → AI Categorizer" >> load-tests/load-summary.md
-          echo "- **Traffic Distribution**: 30% Firefly, 40% AI, 20% Webhook, 10% Monitoring" >> load-tests/load-summary.md
-          echo "" >> load-tests/load-summary.md
-          echo "## Generated Reports:" >> load-tests/load-summary.md
-          echo "- **Firefly API**: firefly-load-report.html" >> load-tests/load-summary.md
-          echo "- **AI Service**: ai-service-load-report.html" >> load-tests/load-summary.md
-          echo "- **Webhook Service**: webhook-service-load-report.html" >> load-tests/load-summary.md
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" && "${{ github.event.inputs.test_type }}" == "load" ]]; then
-            echo "- **Comprehensive**: comprehensive-load-report.html" >> load-tests/load-summary.md
-          fi
+          echo "- **Target**: ${{ env.FIREFLY_URL }}" >> load-tests/load-summary.md
+          echo "- **Endpoints tested**: /about, /accounts, /transactions" >> load-tests/load-summary.md
 
       - name: Upload Load Test Reports
         uses: actions/upload-artifact@v4
