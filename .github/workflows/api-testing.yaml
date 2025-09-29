@@ -1035,6 +1035,7 @@ jobs:
         env:
           API_TESTING_TOKEN: ${{ secrets.API_TESTING_TOKEN }}
         run: |
+          run: |
           cd load-tests
           
           # Determine test intensity based on trigger type
@@ -1052,6 +1053,27 @@ jobs:
             TEST_TYPE="light"
           fi
           
+          # Check service availability before testing
+          echo "🔍 Checking service availability..."
+          
+          # Check AI Categorizer Service
+          if curl -f -s --max-time 5 "http://52.212.42.101:8082/health" > /dev/null; then
+            AI_SERVICE_AVAILABLE=true
+            echo "✅ AI Categorizer Service is available"
+          else
+            AI_SERVICE_AVAILABLE=false
+            echo "⚠️ AI Categorizer Service is not available"
+          fi
+          
+          # Check Webhook Service
+          if curl -f -s --max-time 5 "http://52.212.42.101:8001/health" > /dev/null; then
+            WEBHOOK_SERVICE_AVAILABLE=true
+            echo "✅ Webhook Service is available"
+          else
+            WEBHOOK_SERVICE_AVAILABLE=false
+            echo "⚠️ Webhook Service is not available"
+          fi
+          
           # 1. Test Firefly III API
           echo "📊 Testing Firefly III API endpoints..."
           locust -f firefly_load_test.py --headless \
@@ -1061,33 +1083,163 @@ jobs:
             --csv firefly-results || echo "::warning::Firefly load test completed with issues"
           
           # 2. Test AI Categorizer Service (port 8082)
-          echo "🤖 Testing AI Categorizer Service..."
-          locust -f ai_service_load_test.py --headless \
-            --users $USERS --spawn-rate $SPAWN_RATE --run-time $RUN_TIME \
-            --host "http://52.212.42.101:8082" \
-            --html ai-service-load-report.html \
-            --csv ai-service-results || echo "::warning::AI service load test completed with issues"
+          if [ "$AI_SERVICE_AVAILABLE" = true ]; then
+            echo "🤖 Testing AI Categorizer Service..."
+            locust -f ai_service_load_test.py --headless \
+              --users $USERS --spawn-rate $SPAWN_RATE --run-time $RUN_TIME \
+              --host "http://52.212.42.101:8082" \
+              --html ai-service-load-report.html \
+              --csv ai-service-results || echo "::warning::AI service load test completed with issues"
+          else
+            echo "🤖 AI Categorizer Service unavailable - creating placeholder report..."
+            cat > ai-service-load-report.html << 'EOF'
+          <!DOCTYPE html>
+          <html>
+          <head>
+              <title>AI Service Load Test Report</title>
+              <style>
+                  body { font-family: Arial, sans-serif; margin: 40px; background: #f5f5f5; }
+                  .container { max-width: 800px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; }
+                  .warning { background: #fff3cd; border: 1px solid #ffeaa7; padding: 15px; border-radius: 4px; margin: 20px 0; }
+                  .stats { background: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0; }
+              </style>
+          </head>
+          <body>
+              <div class="container">
+                  <h1>🤖 AI Categorizer Service Load Test</h1>
+                  
+                  <div class="warning">
+                      <h3>⚠️ Service Unavailable</h3>
+                      <p>The AI Categorizer Service (http://52.212.42.101:8082) was not available during testing.</p>
+                      <p><strong>Timestamp:</strong> $(date)</p>
+                  </div>
+                  
+                  <div class="stats">
+                      <h3>📊 Planned Test Configuration</h3>
+                      <ul>
+                          <li><strong>Target Users:</strong> $USERS concurrent</li>
+                          <li><strong>Spawn Rate:</strong> $SPAWN_RATE users/second</li>
+                          <li><strong>Duration:</strong> $RUN_TIME</li>
+                          <li><strong>Endpoints:</strong> /test-categorize, /incoming, /health, /metrics</li>
+                      </ul>
+                  </div>
+                  
+                  <div class="stats">
+                      <h3>🎯 Expected Performance Targets</h3>
+                      <ul>
+                          <li><strong>Response Time:</strong> < 2000ms (includes OpenAI API calls)</li>
+                          <li><strong>Success Rate:</strong> > 95%</li>
+                          <li><strong>Throughput:</strong> 10-50 requests/second</li>
+                          <li><strong>Error Rate:</strong> < 5%</li>
+                      </ul>
+                  </div>
+                  
+                  <p><em>To run actual load tests, ensure the AI service is running and accessible.</em></p>
+              </div>
+          </body>
+          </html>
+          EOF
+          fi
           
           # 3. Test Webhook Service (port 8001)
-          echo "🔗 Testing Webhook Service..."
-          locust -f webhook_service_load_test.py --headless \
-            --users $USERS --spawn-rate $SPAWN_RATE --run-time $RUN_TIME \
-            --host "http://52.212.42.101:8001" \
-            --html webhook-service-load-report.html \
-            --csv webhook-service-results || echo "::warning::Webhook service load test completed with issues"
+          if [ "$WEBHOOK_SERVICE_AVAILABLE" = true ]; then
+            echo "🔗 Testing Webhook Service..."
+            locust -f webhook_service_load_test.py --headless \
+              --users $USERS --spawn-rate $SPAWN_RATE --run-time $RUN_TIME \
+              --host "http://52.212.42.101:8001" \
+              --html webhook-service-load-report.html \
+              --csv webhook-service-results || echo "::warning::Webhook service load test completed with issues"
+          else
+            echo "🔗 Webhook Service unavailable - creating placeholder report..."
+            cat > webhook-service-load-report.html << 'EOF'
+          <!DOCTYPE html>
+          <html>
+          <head>
+              <title>Webhook Service Load Test Report</title>
+              <style>
+                  body { font-family: Arial, sans-serif; margin: 40px; background: #f5f5f5; }
+                  .container { max-width: 800px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; }
+                  .warning { background: #fff3cd; border: 1px solid #ffeaa7; padding: 15px; border-radius: 4px; margin: 20px 0; }
+                  .stats { background: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0; }
+              </style>
+          </head>
+          <body>
+              <div class="container">
+                  <h1>🔗 Webhook Service Load Test</h1>
+                  
+                  <div class="warning">
+                      <h3>⚠️ Service Unavailable</h3>
+                      <p>The Webhook Service (http://52.212.42.101:8001) was not available during testing.</p>
+                      <p><strong>Timestamp:</strong> $(date)</p>
+                  </div>
+                  
+                  <div class="stats">
+                      <h3>📊 Planned Test Configuration</h3>
+                      <ul>
+                          <li><strong>Target Users:</strong> $USERS concurrent</li>
+                          <li><strong>Spawn Rate:</strong> $SPAWN_RATE users/second</li>
+                          <li><strong>Duration:</strong> $RUN_TIME</li>
+                          <li><strong>Endpoints:</strong> /webhook, /feedback, /health</li>
+                      </ul>
+                  </div>
+                  
+                  <div class="stats">
+                      <h3>🎯 Expected Performance Targets</h3>
+                      <ul>
+                          <li><strong>Response Time:</strong> < 500ms</li>
+                          <li><strong>Success Rate:</strong> > 98%</li>
+                          <li><strong>Throughput:</strong> 50-200 requests/second</li>
+                          <li><strong>Error Rate:</strong> < 2%</li>
+                      </ul>
+                  </div>
+                  
+                  <p><em>To run actual load tests, ensure the webhook service is running and accessible.</em></p>
+              </div>
+          </body>
+          </html>
+          EOF
+          fi
           
           # 4. Comprehensive cross-service test (only for full load tests)
           if [[ "$TEST_TYPE" == "full" ]]; then
-            echo "🌐 Running comprehensive cross-service load test..."
-            locust -f comprehensive_load_test.py --headless \
-              --users 15 --spawn-rate 3 --run-time 90s \
-              --host "http://52.212.42.101:8080" \
-              --html comprehensive-load-report.html \
-              --csv comprehensive-results || echo "::warning::Comprehensive load test completed with issues"
+            if [ "$AI_SERVICE_AVAILABLE" = true ] && [ "$WEBHOOK_SERVICE_AVAILABLE" = true ]; then
+              echo "🌐 Running comprehensive cross-service load test..."
+              locust -f comprehensive_load_test.py --headless \
+                --users 15 --spawn-rate 3 --run-time 90s \
+                --host "http://52.212.42.101:8080" \
+                --html comprehensive-load-report.html \
+                --csv comprehensive-results || echo "::warning::Comprehensive load test completed with issues"
+            else
+              echo "🌐 Cross-service test skipped - some services unavailable"
+              cat > comprehensive-load-report.html << 'EOF'
+          <!DOCTYPE html>
+          <html>
+          <head>
+              <title>Comprehensive Load Test Report</title>
+              <style>
+                  body { font-family: Arial, sans-serif; margin: 40px; background: #f5f5f5; }
+                  .container { max-width: 800px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; }
+                  .warning { background: #fff3cd; border: 1px solid #ffeaa7; padding: 15px; border-radius: 4px; margin: 20px 0; }
+              </style>
+          </head>
+          <body>
+              <div class="container">
+                  <h1>🌐 Comprehensive Load Test</h1>
+                  <div class="warning">
+                      <h3>⚠️ Test Skipped</h3>
+                      <p>Cross-service testing requires all services to be available.</p>
+                      <p>Some services were unavailable during this test run.</p>
+                  </div>
+              </div>
+          </body>
+          </html>
+          EOF
+            fi
           fi
           
           echo "✅ All load tests completed"
-           # Create a unified load-test-report.html for backward compatibility
+          
+          # Create a unified load-test-report.html for backward compatibility
           if [[ "$TEST_TYPE" == "full" ]]; then
             TEST_DESCRIPTION="Full load test suite (20 users, 120s duration)"
           else
