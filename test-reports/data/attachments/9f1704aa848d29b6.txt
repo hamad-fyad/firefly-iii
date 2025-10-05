@@ -1,0 +1,6 @@
+📁 test_ai_unit.py: 0.3s
+📁 test_webhook_unit.py: 0.4s
+📁 test_performance.py: 0.8s
+✅ Unit test suite performance check passed
+📊 Estimated suite time: 1.5s
+⚡ Actual simulation time: 0.15s

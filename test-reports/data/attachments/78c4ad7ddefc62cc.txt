@@ -1,0 +1,3 @@
+✅ Found 10 transactions
+✅ Total transactions: 16
+✅ Transaction example: test_transaction_20251005062258_9245 - Coffee purchase - $25.500000000000

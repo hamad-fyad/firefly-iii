@@ -1,0 +1,2 @@
+✅ Executed 10 tests concurrently in 0.26s
+⚡ Average test time: 0.026s

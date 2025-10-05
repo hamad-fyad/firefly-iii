@@ -1,0 +1,5 @@
+"DESCRIPTION","DURATION IN MS","NAME","PARENT SUITE","START TIME","STATUS","STOP TIME","SUB SUITE","SUITE","TEST CLASS","TEST METHOD"
+"","2755","test_logout","tests-UI","Sun Oct 05 06:30:30 UTC 2025","passed","Sun Oct 05 06:30:32 UTC 2025","Fireflylogout","test_logout","",""
+"Test connectivity to Firefly III instance.","1400","test_firefly_connectivity","tests-UI","Sun Oct 05 06:30:09 UTC 2025","passed","Sun Oct 05 06:30:10 UTC 2025","ChromeSmokeTest","test_chrome_smoke","",""
+"","19598","test_create_budget","tests-UI","Sun Oct 05 06:30:10 UTC 2025","passed","Sun Oct 05 06:30:30 UTC 2025","FireflyBudgetTest","test_flow_creating_budget_and_deleting_account","",""
+"Test basic Chrome WebDriver operations.","543","test_chrome_basic_functionality","tests-UI","Sun Oct 05 06:30:08 UTC 2025","passed","Sun Oct 05 06:30:09 UTC 2025","ChromeSmokeTest","test_chrome_smoke","",""

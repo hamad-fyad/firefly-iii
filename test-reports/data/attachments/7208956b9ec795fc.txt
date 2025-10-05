@@ -1,0 +1,2 @@
+✅ Processed 50 transactions in 0.50s
+📊 Throughput: 99.0 transactions/second
